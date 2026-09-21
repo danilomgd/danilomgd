@@ -1,0 +1,29 @@
+# Credenciais - NUNCA versionar
+.env
+.env.local
+*.key
+*.secret
+credenciais*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Saidas de geracao
+out/
+downloads/
+*.mp4
+*.mov
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp3
+*.wav
+
+# Sistema
+.DS_Store
+Thumbs.db
