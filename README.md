@@ -13,7 +13,8 @@ hf_api/
   client.py    cliente REST (auth, retry, polling, download)
   errors.py    exceções tipadas por tipo de falha
 scripts/
-  testar_conexao.py   valida a chave — rode este primeiro
+  testar_conexao.py     valida a chave — rode este primeiro
+  diagnosticar_auth.py  testa todos os formatos de auth quando dá 401
   gerar_imagem.py     text-to-image
   gerar_video.py      image-to-video
 n8n/
@@ -51,8 +52,16 @@ python3 scripts/testar_conexao.py
 
 Saída esperada em caso de sucesso: `[OK] ... AUTENTICACAO FUNCIONOU`.
 
-Se aparecer `[FALHA] A chave foi rejeitada`, o Key ID ou o Secret estão
-errados, ou a chave foi revogada.
+Se aparecer `[FALHA] A chave foi rejeitada` (HTTP 401), rode o diagnosticador:
+
+```bash
+python3 scripts/diagnosticar_auth.py
+```
+
+Ele testa oito formatos de autenticação diferentes contra a API e informa qual
+o servidor aceita, distinguindo credencial inválida de falha de rede. Também
+alerta quando o valor em `HF_API_KEY` parece um rótulo descritivo em vez de um
+identificador — erro comum ao copiar do painel.
 
 ## Passo 4 — Gerar
 
