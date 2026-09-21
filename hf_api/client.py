@@ -201,7 +201,8 @@ class HiggsfieldClient:
             separador = "&" if "?" in caminho else "?"
             caminho = f"{caminho}{separador}hf_webhook={urllib.parse.quote(webhook, safe='')}"
 
-        resposta = self._requisicao("POST", caminho, {"params": entrada})
+        # O corpo vai plano: a API nao usa wrapper "params"/"input".
+        resposta = self._requisicao("POST", caminho, entrada)
         request_id = (
             resposta.get("request_id")
             or resposta.get("id")

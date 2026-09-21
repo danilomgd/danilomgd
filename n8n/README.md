@@ -49,13 +49,11 @@ HTTP, senão ela aparece no JSON exportado do workflow.
 
 ```json
 {
-  "params": {
-    "model": "dop-turbo",
-    "prompt": "{{ $json.prompt }}",
-    "input_images": [
-      { "type": "image_url", "image_url": "{{ $json.imagem }}" }
-    ]
-  }
+  "model": "dop-turbo",
+  "prompt": "{{ $json.prompt }}",
+  "input_images": [
+    { "type": "image_url", "image_url": "{{ $json.imagem }}" }
+  ]
 }
 ```
 

@@ -122,7 +122,7 @@ Equivalente em curl:
 curl -X POST https://api.higgsfield.ai/v1/text2image/soul \
   -H "Authorization: Key $HF_API_KEY:$HF_API_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"params":{"prompt":"um gato astronauta","aspect_ratio":"9:16"}}'
+  -d '{"prompt":"um gato astronauta","aspect_ratio":"9:16"}'
 ```
 
 ## Tratamento de erros
@@ -161,3 +161,91 @@ ser conferidos no seu console:
 2. **Billing**: confirme se a API de plataforma consome os créditos da sua
    assinatura ou tem cobrança separada
 3. **Catálogo completo de endpoints** além de text2image e image2video
+
+---
+
+# Seedance 2.5 via SDK oficial
+
+Além do cliente próprio acima, o projeto inclui o **SDK oficial** da Higgsfield
+(`higgsfield-client`) com um exemplo pronto de geração de vídeo.
+
+## Instalação
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Credencial
+
+O SDK oficial lê a variável `HF_KEY`, num valor único no formato
+`key-id:key-secret`:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Abra `.env.local` **no seu editor local** e preencha:
+
+```
+HF_KEY=seu-key-id:seu-key-secret
+```
+
+`.env.local` está no `.gitignore`. A chave nunca deve ser colada em chat,
+commit ou mensagem.
+
+## Executar
+
+```bash
+python3 main.py
+```
+
+**Cada execução dispara uma geração real e consome créditos.**
+
+| Parâmetro | Valor |
+|---|---|
+| Modelo | `bytedance/seedance-2.5/text-to-video` |
+| Prompt | `A cinematic scene at sunset` |
+| Duração | 5 |
+| Resolução | 720p |
+| Proporção | 16:9 |
+
+## Armadilha do SDK que este exemplo trata
+
+`subscribe()` faz polling até um estado terminal e devolve o JSON **sem
+levantar exceção**. Os estados terminais do SDK são:
+
+```python
+DONE_STATUSES = (Completed, NSFW, Cancelled, Failed)
+```
+
+Ou seja, um retorno sem erro **não significa sucesso** — um job reprovado na
+moderação ou falhado retorna pelo mesmo caminho de um concluído. Código que
+lê a URL direto do retorno vai quebrar ou, pior, relatar sucesso falso.
+
+`main.py` verifica o status final de três formas antes de reportar qualquer
+coisa:
+
+1. O tipo do último `Status` recebido no callback `on_queue_update`
+2. O campo `status` no corpo da resposta
+3. A existência efetiva de uma URL de vídeo no payload
+
+Códigos de saída:
+
+| Código | Significado |
+|---|---|
+| 0 | Vídeo gerado, URL impressa |
+| 1 | Job falhou, foi moderado, cancelado, ou não retornou URL |
+| 2 | Credencial ausente |
+| 3 | Erro de rede ou rejeição da API |
+
+## Referência da API confirmada no SDK
+
+| Item | Valor |
+|---|---|
+| Base URL | `https://api.higgsfield.ai` |
+| Header | `Authorization: Key <key-id>:<key-secret>` |
+| Variável de ambiente | `HF_KEY` (ou `HF_API_KEY` + `HF_API_SECRET`) |
+| Formato do corpo | dict plano, **sem** wrapper `params` ou `input` |
+| Status possíveis | `queued`, `in_progress`, `completed`, `failed`, `nsfw`, `canceled` |

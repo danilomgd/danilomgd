@@ -1,0 +1,5 @@
+# SDK oficial da Higgsfield
+higgsfield-client>=0.2.0
+
+# Carregador de variaveis de ambiente a partir de .env.local
+python-dotenv>=1.0.0

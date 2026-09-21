@@ -1,14 +1,15 @@
 # Credenciais - NUNCA versionar
 .env
 .env.local
+.env.*.local
 *.key
 *.secret
 credenciais*.json
 
 # Python
+.venv/
 __pycache__/
 *.py[cod]
-.venv/
 venv/
 .pytest_cache/
 
