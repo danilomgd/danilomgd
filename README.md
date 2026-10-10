@@ -249,3 +249,34 @@ Códigos de saída:
 | Variável de ambiente | `HF_KEY` (ou `HF_API_KEY` + `HF_API_SECRET`) |
 | Formato do corpo | dict plano, **sem** wrapper `params` ou `input` |
 | Status possíveis | `queued`, `in_progress`, `completed`, `failed`, `nsfw`, `canceled` |
+
+## VectorCraft MCP (vetores para o Claude Code)
+
+O projeto registra o servidor MCP do [VectorCraft](https://github.com/storytold/vectorcraft)
+(`vectorcraft-cli mcp`), para o Claude desenhar, editar e exportar vetores. Usa somente o
+repositório oficial `storytold/vectorcraft`; nada vem de npm ou pip.
+
+```
+.mcp.json                           servidor "vectorcraft" (escopo project) -> scripts/vectorcraft/mcp.sh
+scripts/vectorcraft/mcp.sh          localiza o binário (ou compila no Linux) e inicia `vectorcraft-cli mcp`
+scripts/vectorcraft/install-macos.sh  Mac: baixa o binário universal da release, confere SHA-256,
+                                      cai para `cargo build` se preciso, registra no escopo user
+scripts/vectorcraft/ensure-linux.sh   Linux (nuvem): clona a tag mais recente e compila com Rust
+.claude/hooks/session-start.sh      hook SessionStart: roda o ensure-linux.sh nas sessões na nuvem
+```
+
+### No Mac (uma vez)
+
+```bash
+bash scripts/vectorcraft/install-macos.sh
+```
+
+Instala em `~/.local/bin/vectorcraft-cli`, roda `claude mcp add --scope user vectorcraft -- ... mcp`
+e termina com `claude mcp list`. Para forçar a compilação em vez do download:
+`VECTORCRAFT_FORCE_BUILD=1 bash scripts/vectorcraft/install-macos.sh`.
+
+### Nas sessões Claude Code na nuvem (Linux)
+
+Nada a fazer. O hook compila o `vectorcraft-cli` em `~/.vectorcraft/bin` na primeira sessão
+(o container é cacheado depois disso) e o `.mcp.json` sobe o servidor. Para fixar uma versão,
+defina `VECTORCRAFT_VERSION=v0.8.0` no ambiente.
