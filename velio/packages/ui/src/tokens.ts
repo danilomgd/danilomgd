@@ -4,8 +4,30 @@
  * neutros quentes (premium, calmo) e um âmbar discreto como acento de ação secundária.
  */
 export const palette = {
-  petrol: { 50: '#EEF4F6', 100: '#D6E4E9', 200: '#ADC9D3', 300: '#7FAABA', 400: '#4F879C', 500: '#2E6A80', 600: '#215468', 700: '#194252', 800: '#122F3B', 900: '#0B1E26' },
-  sand: { 50: '#FBFAF7', 100: '#F5F2EC', 200: '#EAE5DA', 300: '#D9D1C2', 400: '#BDB2A0', 500: '#9A8E7B', 600: '#75695A', 700: '#564D42', 800: '#38322B', 900: '#1F1B17' },
+  petrol: {
+    50: '#EEF4F6',
+    100: '#D6E4E9',
+    200: '#ADC9D3',
+    300: '#7FAABA',
+    400: '#4F879C',
+    500: '#2E6A80',
+    600: '#215468',
+    700: '#194252',
+    800: '#122F3B',
+    900: '#0B1E26',
+  },
+  sand: {
+    50: '#FBFAF7',
+    100: '#F5F2EC',
+    200: '#EAE5DA',
+    300: '#D9D1C2',
+    400: '#BDB2A0',
+    500: '#9A8E7B',
+    600: '#75695A',
+    700: '#564D42',
+    800: '#38322B',
+    900: '#1F1B17',
+  },
   amber: { 100: '#FFF1D6', 300: '#FFD48A', 500: '#F2A93B', 600: '#D98F1F', 700: '#A86A0F' },
   green: { 100: '#DDF5EA', 500: '#1F9D6A', 700: '#15704B' },
   red: { 100: '#FDE3E1', 500: '#D64545', 700: '#A12E2E' },
@@ -64,7 +86,19 @@ export const darkTheme: typeof lightTheme = {
 
 export type Theme = typeof lightTheme;
 
-export const spacing = { 0: 0, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48, 16: 64 } as const;
+export const spacing = {
+  0: 0,
+  1: 4,
+  2: 8,
+  3: 12,
+  4: 16,
+  5: 20,
+  6: 24,
+  8: 32,
+  10: 40,
+  12: 48,
+  16: 64,
+} as const;
 export const radius = { sm: 8, md: 12, lg: 16, xl: 24, pill: 999 } as const;
 
 export const typography = {
@@ -75,10 +109,34 @@ export const typography = {
 } as const;
 
 export const elevation = {
-  none: { shadowColor: 'transparent', shadowOpacity: 0, shadowRadius: 0, shadowOffset: { width: 0, height: 0 }, elevation: 0 },
-  sm: { shadowColor: palette.petrol[900], shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  md: { shadowColor: palette.petrol[900], shadowOpacity: 0.1, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
-  lg: { shadowColor: palette.petrol[900], shadowOpacity: 0.16, shadowRadius: 28, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
+  none: {
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  sm: {
+    shadowColor: palette.petrol[900],
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  md: {
+    shadowColor: palette.petrol[900],
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  lg: {
+    shadowColor: palette.petrol[900],
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
 } as const;
 
 export const motion = {
@@ -134,7 +192,8 @@ export const statusTone: Record<string, 'neutral' | 'info' | 'primary' | 'succes
 /** CSS custom properties para a web (gerado a partir do tema). */
 export function themeToCssVars(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(theme)) out[`--color-${k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`] = v;
+  for (const [k, v] of Object.entries(theme))
+    out[`--color-${k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}`] = v;
   for (const [k, v] of Object.entries(spacing)) out[`--space-${k}`] = `${v}px`;
   for (const [k, v] of Object.entries(radius)) out[`--radius-${k}`] = `${v}px`;
   return out;

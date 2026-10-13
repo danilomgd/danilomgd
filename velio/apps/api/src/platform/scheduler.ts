@@ -2,7 +2,10 @@ import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../db/client';
 import { scheduledJobs } from '../db/schema';
 
-export type JobHandler = (payload: Record<string, unknown>, job: { id: string; kind: string; attempts: number }) => Promise<void>;
+export type JobHandler = (
+  payload: Record<string, unknown>,
+  job: { id: string; kind: string; attempts: number },
+) => Promise<void>;
 
 /**
  * Agendador em tabela Postgres (ADR-012). Lock otimista por `lockedBy`.
@@ -16,22 +19,43 @@ export class Scheduler {
 
   constructor(
     private readonly db: Db,
-    private readonly log: { error: (o: unknown, msg?: string) => void; debug: (o: unknown, msg?: string) => void },
+    private readonly log: {
+      error: (o: unknown, msg?: string) => void;
+      debug: (o: unknown, msg?: string) => void;
+    },
   ) {}
 
   register(kind: string, handler: JobHandler): void {
     this.handlers.set(kind, handler);
   }
 
-  async schedule(tx: Tx | Db, job: { kind: string; runAt: Date; payload?: Record<string, unknown>; dedupeKey?: string; maxAttempts?: number }): Promise<void> {
+  async schedule(
+    tx: Tx | Db,
+    job: {
+      kind: string;
+      runAt: Date;
+      payload?: Record<string, unknown>;
+      dedupeKey?: string;
+      maxAttempts?: number;
+    },
+  ): Promise<void> {
     await tx
       .insert(scheduledJobs)
-      .values({ kind: job.kind, runAt: job.runAt, payload: job.payload ?? {}, dedupeKey: job.dedupeKey ?? null, maxAttempts: job.maxAttempts ?? 5 })
+      .values({
+        kind: job.kind,
+        runAt: job.runAt,
+        payload: job.payload ?? {},
+        dedupeKey: job.dedupeKey ?? null,
+        maxAttempts: job.maxAttempts ?? 5,
+      })
       .onConflictDoNothing({ target: scheduledJobs.dedupeKey });
   }
 
   async cancelByDedupe(tx: Tx | Db, dedupeKey: string): Promise<void> {
-    await tx.update(scheduledJobs).set({ status: 'CANCELLED' }).where(and(eq(scheduledJobs.dedupeKey, dedupeKey), eq(scheduledJobs.status, 'PENDING')));
+    await tx
+      .update(scheduledJobs)
+      .set({ status: 'CANCELLED' })
+      .where(and(eq(scheduledJobs.dedupeKey, dedupeKey), eq(scheduledJobs.status, 'PENDING')));
   }
 
   start(intervalMs: number): void {
@@ -60,7 +84,12 @@ export class Scheduler {
       for (const job of due) {
         const locked = await this.db
           .update(scheduledJobs)
-          .set({ status: 'RUNNING', lockedBy: this.workerId, lockedAt: now, attempts: sql`${scheduledJobs.attempts} + 1` })
+          .set({
+            status: 'RUNNING',
+            lockedBy: this.workerId,
+            lockedAt: now,
+            attempts: sql`${scheduledJobs.attempts} + 1`,
+          })
           .where(and(eq(scheduledJobs.id, job.id), eq(scheduledJobs.status, 'PENDING')))
           .returning({ id: scheduledJobs.id, attempts: scheduledJobs.attempts });
         if (locked.length === 0) continue;
@@ -69,7 +98,10 @@ export class Scheduler {
         try {
           if (!handler) throw new Error(`Sem handler para job ${job.kind}`);
           await handler(job.payload ?? {}, { id: job.id, kind: job.kind, attempts });
-          await this.db.update(scheduledJobs).set({ status: 'DONE', lockedBy: null }).where(eq(scheduledJobs.id, job.id));
+          await this.db
+            .update(scheduledJobs)
+            .set({ status: 'DONE', lockedBy: null })
+            .where(eq(scheduledJobs.id, job.id));
           ran++;
         } catch (err) {
           const message = String((err as Error)?.message ?? err);

@@ -15,7 +15,14 @@ export interface SocketUser {
  * coloca cada socket nas salas do usuário, do prestador e de ops conforme papéis.
  * Eventos de ordem e localização são emitidos pelos módulos via `ctx.io`.
  */
-export function attachRealtime(app: FastifyInstance, cfg: Config, hooks: { onLocation?: (user: SocketUser, p: Record<string, unknown>) => Promise<void>; canJoinOrder?: (user: SocketUser, orderId: string) => Promise<boolean> } = {}): IOServer {
+export function attachRealtime(
+  app: FastifyInstance,
+  cfg: Config,
+  hooks: {
+    onLocation?: (user: SocketUser, p: Record<string, unknown>) => Promise<void>;
+    canJoinOrder?: (user: SocketUser, orderId: string) => Promise<boolean>;
+  } = {},
+): IOServer {
   const io = new IOServer(app.server, {
     path: '/realtime',
     cors: { origin: cfg.CORS_ORIGINS === '*' ? true : cfg.CORS_ORIGINS.split(','), credentials: true },
@@ -23,10 +30,16 @@ export function attachRealtime(app: FastifyInstance, cfg: Config, hooks: { onLoc
   });
 
   io.use((socket, next) => {
-    const token = (socket.handshake.auth as { token?: string })?.token ?? (socket.handshake.headers.authorization ?? '').replace(/^Bearer /, '');
+    const token =
+      (socket.handshake.auth as { token?: string })?.token ??
+      (socket.handshake.headers.authorization ?? '').replace(/^Bearer /, '');
     const claims = token ? verifyJwt(token, cfg.JWT_SECRET) : null;
     if (!claims) return next(new Error('unauthorized'));
-    socket.data.user = { userId: claims.sub, roles: claims.roles, providerId: claims.providerId ?? null } satisfies SocketUser;
+    socket.data.user = {
+      userId: claims.sub,
+      roles: claims.roles,
+      providerId: claims.providerId ?? null,
+    } satisfies SocketUser;
     next();
   });
 

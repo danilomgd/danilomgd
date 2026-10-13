@@ -1,4 +1,14 @@
-import { doublePrecision, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './_shared';
 
 export const serviceRequests = pgTable(
@@ -22,7 +32,10 @@ export const serviceRequests = pgTable(
     idempotencyKey: varchar('idempotency_key', { length: 64 }),
     createdAt: createdAt(),
   },
-  (t) => [index('requests_customer_idx').on(t.customerId), uniqueIndex('requests_idempotency_uq').on(t.customerId, t.idempotencyKey)],
+  (t) => [
+    index('requests_customer_idx').on(t.customerId),
+    uniqueIndex('requests_idempotency_uq').on(t.customerId, t.idempotencyKey),
+  ],
 );
 
 export const serviceOrders = pgTable(
@@ -69,9 +82,21 @@ export const serviceOrders = pgTable(
     dispatchWave: integer('dispatch_wave').notNull().default(0),
     /** Flags derivadas da categoria, congeladas no momento da criação. */
     flags: jsonb('flags')
-      .$type<{ requiresStartPin: boolean; requiresBeforeAfterPhotos: boolean; requiresCustody: boolean; requiresVehicleHandover: boolean; allowsAdditionalQuote: boolean }>()
+      .$type<{
+        requiresStartPin: boolean;
+        requiresBeforeAfterPhotos: boolean;
+        requiresCustody: boolean;
+        requiresVehicleHandover: boolean;
+        allowsAdditionalQuote: boolean;
+      }>()
       .notNull()
-      .default({ requiresStartPin: false, requiresBeforeAfterPhotos: false, requiresCustody: false, requiresVehicleHandover: false, allowsAdditionalQuote: true }),
+      .default({
+        requiresStartPin: false,
+        requiresBeforeAfterPhotos: false,
+        requiresCustody: false,
+        requiresVehicleHandover: false,
+        allowsAdditionalQuote: true,
+      }),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
     version: integer('version').notNull().default(0),
     createdAt: createdAt(),
@@ -136,7 +161,10 @@ export const bookings = pgTable(
     releasedAt: timestamp('released_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('bookings_order_uq').on(t.orderId), index('bookings_provider_idx').on(t.providerId, t.startsAt)],
+  (t) => [
+    uniqueIndex('bookings_order_uq').on(t.orderId),
+    index('bookings_provider_idx').on(t.providerId, t.startsAt),
+  ],
 );
 
 export const mediaEvidence = pgTable(
@@ -197,7 +225,10 @@ export const quotes = pgTable(
     providerId: text('provider_id').notNull(),
     kind: varchar('kind', { length: 12 }).notNull(),
     status: varchar('status', { length: 12 }).notNull().default('SENT'),
-    items: jsonb('items').$type<Array<{ description: string; quantity: number; unitPriceCents: number }>>().notNull().default([]),
+    items: jsonb('items')
+      .$type<Array<{ description: string; quantity: number; unitPriceCents: number }>>()
+      .notNull()
+      .default([]),
     amountCents: integer('amount_cents').notNull(),
     notes: text('notes'),
     expiresAt: timestamp('expires_at', { withTimezone: true }),

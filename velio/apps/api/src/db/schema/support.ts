@@ -15,7 +15,10 @@ export const reviews = pgTable(
     hiddenAt: timestamp('hidden_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('reviews_order_target_uq').on(t.orderId, t.targetType), index('reviews_target_idx').on(t.targetType, t.targetId, t.createdAt)],
+  (t) => [
+    uniqueIndex('reviews_order_target_uq').on(t.orderId, t.targetType),
+    index('reviews_target_idx').on(t.targetType, t.targetId, t.createdAt),
+  ],
 );
 
 export const customerRiskSignals = pgTable('customer_risk_signals', {
@@ -58,7 +61,11 @@ export const disputes = pgTable(
     description: text('description').notNull(),
     evidenceUrls: jsonb('evidence_urls').$type<string[]>().notNull().default([]),
     status: varchar('status', { length: 20 }).notNull().default('OPEN'),
-    resolution: jsonb('resolution').$type<{ refundCents: number; providerPayoutCents: number; note: string }>(),
+    resolution: jsonb('resolution').$type<{
+      refundCents: number;
+      providerPayoutCents: number;
+      note: string;
+    }>(),
     resolvedByUserId: text('resolved_by_user_id'),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     createdAt: createdAt(),
@@ -82,5 +89,8 @@ export const incidents = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('incidents_status_idx').on(t.status, t.createdAt), index('incidents_order_idx').on(t.orderId)],
+  (t) => [
+    index('incidents_status_idx').on(t.status, t.createdAt),
+    index('incidents_order_idx').on(t.orderId),
+  ],
 );

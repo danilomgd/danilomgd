@@ -1,5 +1,5 @@
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import type { ConciergePlan } from '@velio/contracts';
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './_shared';
 
 export const conciergeRequests = pgTable(
@@ -44,7 +44,10 @@ export const auditLogs = pgTable(
     ip: varchar('ip', { length: 45 }),
     createdAt: createdAt(),
   },
-  (t) => [index('audit_target_idx').on(t.targetType, t.targetId), index('audit_actor_idx').on(t.actorUserId, t.createdAt)],
+  (t) => [
+    index('audit_target_idx').on(t.targetType, t.targetId),
+    index('audit_actor_idx').on(t.actorUserId, t.createdAt),
+  ],
 );
 
 /** Outbox: eventos de domínio persistidos na mesma transação e despachados depois (ADR-009). */
@@ -61,7 +64,10 @@ export const domainEvents = pgTable(
     attempts: integer('attempts').notNull().default(0),
     lastError: text('last_error'),
   },
-  (t) => [index('domain_events_pending_idx').on(t.dispatchedAt, t.createdAt), index('domain_events_aggregate_idx').on(t.aggregateType, t.aggregateId)],
+  (t) => [
+    index('domain_events_pending_idx').on(t.dispatchedAt, t.createdAt),
+    index('domain_events_aggregate_idx').on(t.aggregateType, t.aggregateId),
+  ],
 );
 
 export const scheduledJobs = pgTable(
@@ -81,7 +87,10 @@ export const scheduledJobs = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('scheduled_jobs_due_idx').on(t.status, t.runAt), uniqueIndex('scheduled_jobs_dedupe_uq').on(t.dedupeKey)],
+  (t) => [
+    index('scheduled_jobs_due_idx').on(t.status, t.runAt),
+    uniqueIndex('scheduled_jobs_dedupe_uq').on(t.dedupeKey),
+  ],
 );
 
 export const analyticsEvents = pgTable(
@@ -99,5 +108,8 @@ export const analyticsEvents = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index('analytics_name_idx').on(t.name, t.occurredAt), index('analytics_user_idx').on(t.userId, t.occurredAt)],
+  (t) => [
+    index('analytics_name_idx').on(t.name, t.occurredAt),
+    index('analytics_user_idx').on(t.userId, t.occurredAt),
+  ],
 );

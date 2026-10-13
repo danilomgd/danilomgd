@@ -8,8 +8,14 @@ const Env = z.object({
   DATABASE_URL: z.string().url().optional(),
   PGLITE_DATA_DIR: z.string().optional(),
   JWT_SECRET: z.string().min(32).default('dev-only-secret-change-me-dev-only-secret-change-me'),
-  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().default(15 * 60),
-  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().default(30 * 24 * 3600),
+  JWT_ACCESS_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .default(15 * 60),
+  JWT_REFRESH_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .default(30 * 24 * 3600),
   CORS_ORIGINS: z.string().default('*'),
   PAYMENTS_PROVIDER: z.enum(['sandbox', 'pagarme']).default('sandbox'),
   PAGARME_SECRET_KEY: z.string().optional(),

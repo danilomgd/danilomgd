@@ -10,7 +10,12 @@ import type { AppContext } from '../context';
  */
 export interface Modules {
   orders: {
-    canUserAccessOrder(userId: string, roles: string[], providerId: string | null, orderId: string): Promise<boolean>;
+    canUserAccessOrder(
+      userId: string,
+      roles: string[],
+      providerId: string | null,
+      orderId: string,
+    ): Promise<boolean>;
   };
   providers: {
     ingestLocation(providerId: string, pings: Array<Record<string, unknown>>): Promise<void>;

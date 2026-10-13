@@ -32,11 +32,17 @@ export function requireProvider(req: FastifyRequest): AuthContext & { providerId
 }
 
 /** Traduz o contexto autenticado no ator do domínio. Operador/admin viram 'operator'. */
-export function actorFrom(a: AuthContext, preferred?: ActorType): { type: ActorType; userId: string; providerId: string | null } {
-  if (preferred === 'provider' && a.roles.includes('provider')) return { type: 'provider', userId: a.userId, providerId: a.providerId };
+export function actorFrom(
+  a: AuthContext,
+  preferred?: ActorType,
+): { type: ActorType; userId: string; providerId: string | null } {
+  if (preferred === 'provider' && a.roles.includes('provider'))
+    return { type: 'provider', userId: a.userId, providerId: a.providerId };
   if (preferred === 'customer') return { type: 'customer', userId: a.userId, providerId: null };
-  if (a.roles.includes('admin') || a.roles.includes('operator')) return { type: 'operator', userId: a.userId, providerId: null };
-  if (a.roles.includes('provider') && a.providerId) return { type: 'provider', userId: a.userId, providerId: a.providerId };
+  if (a.roles.includes('admin') || a.roles.includes('operator'))
+    return { type: 'operator', userId: a.userId, providerId: null };
+  if (a.roles.includes('provider') && a.providerId)
+    return { type: 'provider', userId: a.userId, providerId: a.providerId };
   return { type: 'customer', userId: a.userId, providerId: null };
 }
 

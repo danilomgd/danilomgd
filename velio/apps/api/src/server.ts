@@ -12,4 +12,6 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 await app.fastify.listen({ port: PORT, host: HOST });
-app.fastify.log.info(`VÉLIO API ouvindo em http://${HOST}:${PORT} (db=${app.ctx.dbHandle.driver}, payments=${app.ctx.adapters.payments.name})`);
+app.fastify.log.info(
+  `VÉLIO API ouvindo em http://${HOST}:${PORT} (db=${app.ctx.dbHandle.driver}, payments=${app.ctx.adapters.payments.name})`,
+);

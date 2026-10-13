@@ -41,7 +41,14 @@ export class RealtimeClient {
   unsubscribeOrder(orderId: string) {
     this.socket?.emit('order.unsubscribe', { orderId });
   }
-  pushLocation(p: { lat: number; lng: number; accuracyM?: number; headingDeg?: number; speedMps?: number; recordedAt: string }) {
+  pushLocation(p: {
+    lat: number;
+    lng: number;
+    accuracyM?: number;
+    headingDeg?: number;
+    speedMps?: number;
+    recordedAt: string;
+  }) {
     this.socket?.emit('location.push', p);
   }
   disconnect() {

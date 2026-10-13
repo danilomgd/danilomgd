@@ -16,13 +16,22 @@
     "build": "echo 'source package, nothing to build'"
   },
   "peerDependencies": {
+    "@expo/vector-icons": "*",
+    "expo-image-picker": "*",
     "react": "*",
     "react-native": "*"
   },
+  "peerDependenciesMeta": {
+    "@expo/vector-icons": { "optional": true },
+    "expo-image-picker": { "optional": true }
+  },
   "devDependencies": {
-    "@types/react": "^19.2.0",
-    "react": "^19.2.0",
-    "react-native": "^0.87.1",
+    "@expo/vector-icons": "^15.1.1",
+    "@types/react": "~19.2.17",
+    "expo": "~57.0.28",
+    "expo-image-picker": "~57.0.20",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
     "typescript": "~5.9.3",
     "vitest": "^5.0.4"
   }

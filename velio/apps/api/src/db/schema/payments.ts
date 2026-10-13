@@ -1,4 +1,14 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './_shared';
 
 export const paymentMethods = pgTable(
@@ -119,7 +129,11 @@ export const ledgerEntries = pgTable(
     description: text('description').notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index('ledger_account_idx').on(t.accountId, t.createdAt), index('ledger_order_idx').on(t.orderId), index('ledger_journal_idx').on(t.journalId)],
+  (t) => [
+    index('ledger_account_idx').on(t.accountId, t.createdAt),
+    index('ledger_order_idx').on(t.orderId),
+    index('ledger_journal_idx').on(t.journalId),
+  ],
 );
 
 export const payouts = pgTable(
@@ -158,25 +172,22 @@ export const commissionRules = pgTable(
   (t) => [index('commission_rules_scope_idx').on(t.categoryId, t.regionId)],
 );
 
-export const coupons = pgTable(
-  'coupons',
-  {
-    code: varchar('code', { length: 20 }).primaryKey(),
-    kind: varchar('kind', { length: 10 }).notNull(),
-    value: integer('value').notNull(),
-    minOrderCents: integer('min_order_cents'),
-    maxDiscountCents: integer('max_discount_cents'),
-    validFrom: timestamp('valid_from', { withTimezone: true }),
-    validUntil: timestamp('valid_until', { withTimezone: true }),
-    usageLimit: integer('usage_limit'),
-    perUserLimit: integer('per_user_limit'),
-    usedCount: integer('used_count').notNull().default(0),
-    categoryId: text('category_id'),
-    active: boolean('active').notNull().default(true),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-);
+export const coupons = pgTable('coupons', {
+  code: varchar('code', { length: 20 }).primaryKey(),
+  kind: varchar('kind', { length: 10 }).notNull(),
+  value: integer('value').notNull(),
+  minOrderCents: integer('min_order_cents'),
+  maxDiscountCents: integer('max_discount_cents'),
+  validFrom: timestamp('valid_from', { withTimezone: true }),
+  validUntil: timestamp('valid_until', { withTimezone: true }),
+  usageLimit: integer('usage_limit'),
+  perUserLimit: integer('per_user_limit'),
+  usedCount: integer('used_count').notNull().default(0),
+  categoryId: text('category_id'),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 export const couponRedemptions = pgTable(
   'coupon_redemptions',
@@ -188,7 +199,10 @@ export const couponRedemptions = pgTable(
     discountCents: integer('discount_cents').notNull(),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('coupon_redemptions_order_uq').on(t.orderId), index('coupon_redemptions_user_idx').on(t.code, t.userId)],
+  (t) => [
+    uniqueIndex('coupon_redemptions_order_uq').on(t.orderId),
+    index('coupon_redemptions_user_idx').on(t.code, t.userId),
+  ],
 );
 
 export const promotions = pgTable('promotions', {

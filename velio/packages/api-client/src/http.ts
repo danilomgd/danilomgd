@@ -33,16 +33,26 @@ export class HttpClient {
   private refreshing: Promise<boolean> | null = null;
   constructor(private readonly o: HttpClientOptions) {}
 
-  async request<T>(method: string, path: string, body?: unknown, opts: { retry?: boolean; query?: Record<string, string | number | boolean | undefined> } = {}): Promise<T> {
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    opts: { retry?: boolean; query?: Record<string, string | number | boolean | undefined> } = {},
+  ): Promise<T> {
     const f = this.o.fetchImpl ?? fetch;
     const url = new URL(path, this.o.baseUrl);
-    for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
+    for (const [k, v] of Object.entries(opts.query ?? {}))
+      if (v !== undefined) url.searchParams.set(k, String(v));
     const access = await this.o.tokens.getAccessToken();
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (access) headers.Authorization = `Bearer ${access}`;
     if (this.o.appHeader) headers['X-Velio-App'] = this.o.appHeader;
-    const res = await f(url.toString(), { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await f(url.toString(), {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
     if (res.status === 401 && opts.retry !== false) {
       const ok = await this.refresh();
       if (ok) return this.request<T>(method, path, body, { ...opts, retry: false });
@@ -53,7 +63,12 @@ export class HttpClient {
     const json = text ? (JSON.parse(text) as unknown) : null;
     if (!res.ok) {
       const err = (json as ApiError | null)?.error;
-      throw new ApiRequestError(res.status, err?.code ?? 'HTTP_ERROR', err?.message ?? res.statusText, err?.details);
+      throw new ApiRequestError(
+        res.status,
+        err?.code ?? 'HTTP_ERROR',
+        err?.message ?? res.statusText,
+        err?.details,
+      );
     }
     return json as T;
   }

@@ -1,4 +1,16 @@
-import { boolean, doublePrecision, index, integer, jsonb, pgTable, real, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './_shared';
 
 export const providers = pgTable(
@@ -69,7 +81,10 @@ export const providerSkills = pgTable(
     verified: boolean('verified').notNull().default(false),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('provider_skills_uq').on(t.providerId, t.categoryId), index('provider_skills_category_idx').on(t.categoryId)],
+  (t) => [
+    uniqueIndex('provider_skills_uq').on(t.providerId, t.categoryId),
+    index('provider_skills_category_idx').on(t.categoryId),
+  ],
 );
 
 export const providerServiceAreas = pgTable(
@@ -121,7 +136,10 @@ export const providerLocations = pgTable(
     recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index('provider_locations_provider_idx').on(t.providerId, t.recordedAt), index('provider_locations_order_idx').on(t.orderId)],
+  (t) => [
+    index('provider_locations_provider_idx').on(t.providerId, t.recordedAt),
+    index('provider_locations_order_idx').on(t.orderId),
+  ],
 );
 
 export const providerStats = pgTable('provider_stats', {

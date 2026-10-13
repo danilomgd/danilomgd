@@ -4,7 +4,12 @@ import { AccessTokenClaims } from '@velio/contracts';
 const b64u = (b: Buffer | string) => Buffer.from(b).toString('base64url');
 
 /** JWT HS256 mínimo e auditável, sem dependência externa. */
-export function signJwt(claims: Record<string, unknown>, secret: string, ttlSeconds: number, now = Date.now()): string {
+export function signJwt(
+  claims: Record<string, unknown>,
+  secret: string,
+  ttlSeconds: number,
+  now = Date.now(),
+): string {
   const header = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const iat = Math.floor(now / 1000);
   const payload = b64u(JSON.stringify({ ...claims, iat, exp: iat + ttlSeconds }));
@@ -12,7 +17,11 @@ export function signJwt(claims: Record<string, unknown>, secret: string, ttlSeco
   return `${header}.${payload}.${sig}`;
 }
 
-export function verifyJwt(token: string, secret: string, now = Date.now()): (AccessTokenClaims & { exp: number; iat: number }) | null {
+export function verifyJwt(
+  token: string,
+  secret: string,
+  now = Date.now(),
+): (AccessTokenClaims & { exp: number; iat: number }) | null {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [h, p, s] = parts as [string, string, string];

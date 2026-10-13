@@ -1,4 +1,14 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './_shared';
 
 export const users = pgTable(
@@ -14,7 +24,10 @@ export const users = pgTable(
     locale: varchar('locale', { length: 10 }).notNull().default('pt-BR'),
     timezone: varchar('timezone', { length: 60 }).notNull().default('America/Sao_Paulo'),
     status: varchar('status', { length: 20 }).notNull().default('ACTIVE'),
-    consents: jsonb('consents').$type<Record<string, { granted: boolean; at: string }>>().notNull().default({}),
+    consents: jsonb('consents')
+      .$type<Record<string, { granted: boolean; at: string }>>()
+      .notNull()
+      .default({}),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

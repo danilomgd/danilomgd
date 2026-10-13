@@ -23,7 +23,10 @@ export const conversationParticipants = pgTable(
     role: varchar('role', { length: 20 }).notNull(),
     lastReadAt: timestamp('last_read_at', { withTimezone: true }),
   },
-  (t) => [uniqueIndex('participants_uq').on(t.conversationId, t.userId), index('participants_user_idx').on(t.userId)],
+  (t) => [
+    uniqueIndex('participants_uq').on(t.conversationId, t.userId),
+    index('participants_user_idx').on(t.userId),
+  ],
 );
 
 export const messages = pgTable(

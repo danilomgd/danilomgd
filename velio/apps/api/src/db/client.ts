@@ -24,7 +24,9 @@ const migrationsFolder = new URL('../../drizzle', here).pathname;
  * DATABASE_URL definido → Postgres real. Ausente → PGlite (memória, ou arquivo se PGLITE_DATA_DIR).
  * Em NODE_ENV=production, PGlite é recusado (ADR-015).
  */
-export async function createDb(opts: { url?: string | null; dataDir?: string | null; nodeEnv?: string } = {}): Promise<DbHandle> {
+export async function createDb(
+  opts: { url?: string | null; dataDir?: string | null; nodeEnv?: string } = {},
+): Promise<DbHandle> {
   const url = opts.url ?? process.env.DATABASE_URL ?? null;
   const nodeEnv = opts.nodeEnv ?? process.env.NODE_ENV ?? 'development';
   if (url) {

@@ -9,7 +9,9 @@ export interface DomainEvent {
   payload: Record<string, unknown>;
 }
 
-export type DomainEventHandler = (event: DomainEvent & { id: string; createdAt: Date }) => Promise<void> | void;
+export type DomainEventHandler = (
+  event: DomainEvent & { id: string; createdAt: Date },
+) => Promise<void> | void;
 
 /**
  * Outbox transacional (ADR-009): eventos são gravados na mesma transação da mudança de estado
@@ -22,7 +24,10 @@ export class Outbox {
 
   constructor(
     private readonly db: Db,
-    private readonly log: { error: (o: unknown, msg?: string) => void; debug: (o: unknown, msg?: string) => void },
+    private readonly log: {
+      error: (o: unknown, msg?: string) => void;
+      debug: (o: unknown, msg?: string) => void;
+    },
   ) {}
 
   /** Grava dentro da transação corrente. */
@@ -63,7 +68,12 @@ export class Outbox {
         const pending = await this.db
           .select()
           .from(domainEvents)
-          .where(and(isNull(domainEvents.dispatchedAt), or(lt(domainEvents.attempts, 5), isNull(domainEvents.lastError))))
+          .where(
+            and(
+              isNull(domainEvents.dispatchedAt),
+              or(lt(domainEvents.attempts, 5), isNull(domainEvents.lastError)),
+            ),
+          )
           .orderBy(asc(domainEvents.createdAt))
           .limit(100);
         if (pending.length === 0) break;
@@ -71,13 +81,19 @@ export class Outbox {
           const hs = [...(this.handlers.get(ev.type) ?? []), ...(this.handlers.get('*') ?? [])];
           try {
             for (const h of hs) await h({ ...ev, payload: ev.payload ?? {} });
-            await this.db.update(domainEvents).set({ dispatchedAt: new Date() }).where(eq(domainEvents.id, ev.id));
+            await this.db
+              .update(domainEvents)
+              .set({ dispatchedAt: new Date() })
+              .where(eq(domainEvents.id, ev.id));
             processed++;
           } catch (err) {
             this.log.error({ err, eventId: ev.id, type: ev.type }, 'outbox handler failed');
             await this.db
               .update(domainEvents)
-              .set({ attempts: sql`${domainEvents.attempts} + 1`, lastError: String((err as Error)?.message ?? err) })
+              .set({
+                attempts: sql`${domainEvents.attempts} + 1`,
+                lastError: String((err as Error)?.message ?? err),
+              })
               .where(eq(domainEvents.id, ev.id));
           }
         }

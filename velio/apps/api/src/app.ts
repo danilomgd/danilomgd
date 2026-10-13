@@ -30,25 +30,49 @@ export interface App {
 }
 
 export async function buildApp(opts: BuildOptions = {}): Promise<App> {
-  const cfg = loadConfig({ ...process.env, ...Object.fromEntries(Object.entries(opts.config ?? {}).map(([k, v]) => [k, String(v)])) });
+  const cfg = loadConfig({
+    ...process.env,
+    ...Object.fromEntries(Object.entries(opts.config ?? {}).map(([k, v]) => [k, String(v)])),
+  });
   const fastify = Fastify({
-    logger: { level: cfg.LOG_LEVEL, redact: ['req.headers.authorization', 'body.password', 'body.code', 'body.pin'] },
+    logger: {
+      level: cfg.LOG_LEVEL,
+      redact: ['req.headers.authorization', 'body.password', 'body.code', 'body.pin'],
+    },
     trustProxy: true,
     bodyLimit: 2 * 1024 * 1024,
   });
 
-  const dbHandle = opts.dbHandle ?? (await createDb({ url: cfg.DATABASE_URL, dataDir: cfg.PGLITE_DATA_DIR, nodeEnv: cfg.NODE_ENV }));
+  const dbHandle =
+    opts.dbHandle ??
+    (await createDb({ url: cfg.DATABASE_URL, dataDir: cfg.PGLITE_DATA_DIR, nodeEnv: cfg.NODE_ENV }));
   if (!opts.dbHandle) await dbHandle.migrate();
 
   const adapters = buildAdapters(cfg, fastify.log, opts.adapters);
   const outbox = new Outbox(dbHandle.db, fastify.log);
   const scheduler = new Scheduler(dbHandle.db, fastify.log);
 
-  const ctx: AppContext = { cfg, db: dbHandle.db, dbHandle, log: fastify.log, adapters, outbox, scheduler, io: null };
+  const ctx: AppContext = {
+    cfg,
+    db: dbHandle.db,
+    dbHandle,
+    log: fastify.log,
+    adapters,
+    outbox,
+    scheduler,
+    io: null,
+  };
 
   await fastify.register(sensible);
-  await fastify.register(cors, { origin: cfg.CORS_ORIGINS === '*' ? true : cfg.CORS_ORIGINS.split(','), credentials: true });
-  await fastify.register(rateLimit, { max: cfg.RATE_LIMIT_MAX, timeWindow: '1 minute', keyGenerator: (req) => req.auth?.userId ?? req.ip });
+  await fastify.register(cors, {
+    origin: cfg.CORS_ORIGINS === '*' ? true : cfg.CORS_ORIGINS.split(','),
+    credentials: true,
+  });
+  await fastify.register(rateLimit, {
+    max: cfg.RATE_LIMIT_MAX,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.auth?.userId ?? req.ip,
+  });
 
   // Autenticação: Bearer JWT → req.auth (nunca lança; rotas decidem com requireAuth).
   fastify.decorateRequest('auth', null);
@@ -72,25 +96,38 @@ export async function buildApp(opts: BuildOptions = {}): Promise<App> {
 
   fastify.setErrorHandler((err, req, reply) => {
     if (err instanceof AppError) {
-      return reply.status(err.status).send({ error: { code: err.code, message: err.message, details: err.details } });
+      return reply
+        .status(err.status)
+        .send({ error: { code: err.code, message: err.message, details: err.details } });
     }
     if (err instanceof ZodError) {
-      return reply.status(400).send({ error: { code: 'BAD_REQUEST', message: 'Entrada inválida', details: err.issues } });
+      return reply
+        .status(400)
+        .send({ error: { code: 'BAD_REQUEST', message: 'Entrada inválida', details: err.issues } });
     }
     const status = (err as { statusCode?: number }).statusCode ?? 500;
     if (status >= 500) req.log.error({ err }, 'unhandled error');
     return reply.status(status).send({
-      error: { code: status === 429 ? 'RATE_LIMITED' : status >= 500 ? 'INTERNAL' : 'HTTP_ERROR', message: status >= 500 ? 'Erro interno' : err.message },
+      error: {
+        code: status === 429 ? 'RATE_LIMITED' : status >= 500 ? 'INTERNAL' : 'HTTP_ERROR',
+        message: status >= 500 ? 'Erro interno' : err.message,
+      },
     });
   });
 
-  fastify.get('/health', async () => ({ ok: true, db: dbHandle.driver, payments: adapters.payments.name, time: adapters.clock.now().toISOString() }));
+  fastify.get('/health', async () => ({
+    ok: true,
+    db: dbHandle.driver,
+    payments: adapters.payments.name,
+    time: adapters.clock.now().toISOString(),
+  }));
 
   const modules = await registerModules(fastify, ctx);
 
   if (opts.realtime !== false) {
     ctx.io = attachRealtime(fastify, cfg, {
-      canJoinOrder: (user, orderId) => modules.orders.canUserAccessOrder(user.userId, user.roles, user.providerId, orderId),
+      canJoinOrder: (user, orderId) =>
+        modules.orders.canUserAccessOrder(user.userId, user.roles, user.providerId, orderId),
       onLocation: (user, p) => modules.providers.ingestLocation(user.providerId ?? '', [p as never]),
     });
   }

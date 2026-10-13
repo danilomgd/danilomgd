@@ -1,4 +1,14 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './_shared';
 
 export const subscriptionPlans = pgTable(
@@ -41,7 +51,10 @@ export const subscriptions = pgTable(
     cancelReason: text('cancel_reason'),
     updatedAt: updatedAt(),
   },
-  (t) => [index('subscriptions_customer_idx').on(t.customerId, t.status), index('subscriptions_due_idx').on(t.nextVisitDueAt)],
+  (t) => [
+    index('subscriptions_customer_idx').on(t.customerId, t.status),
+    index('subscriptions_due_idx').on(t.nextVisitDueAt),
+  ],
 );
 
 export const subscriptionVisits = pgTable(
@@ -53,5 +66,8 @@ export const subscriptionVisits = pgTable(
     dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index('subscription_visits_sub_idx').on(t.subscriptionId), uniqueIndex('subscription_visits_order_uq').on(t.orderId)],
+  (t) => [
+    index('subscription_visits_sub_idx').on(t.subscriptionId),
+    uniqueIndex('subscription_visits_order_uq').on(t.orderId),
+  ],
 );

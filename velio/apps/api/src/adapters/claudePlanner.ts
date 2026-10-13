@@ -11,7 +11,10 @@ export class ClaudePlanner implements ConciergePlanner {
   private readonly fallback = new RuleBasedPlanner();
   private readonly client: Anthropic;
 
-  constructor(apiKey: string, private readonly model: string) {
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+  ) {
     this.client = new Anthropic({ apiKey });
     this.name = `claude:${model}`;
   }

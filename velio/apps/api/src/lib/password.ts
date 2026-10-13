@@ -1,7 +1,12 @@
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
-const scrypt = promisify(scryptCb) as (pwd: string, salt: Buffer, keylen: number, opts: { N: number; r: number; p: number }) => Promise<Buffer>;
+const scrypt = promisify(scryptCb) as (
+  pwd: string,
+  salt: Buffer,
+  keylen: number,
+  opts: { N: number; r: number; p: number },
+) => Promise<Buffer>;
 const PARAMS = { N: 2 ** 15, r: 8, p: 1 };
 
 /** scrypt do Node (sem dependência nativa). Formato: scrypt$N$r$p$salt$hash (base64url). */
