@@ -12,7 +12,13 @@ import { acceptPing, estimateEtaMinutes, haversineKm, type MatchCandidate } from
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { AppContext } from '../../context';
-import { providerDocuments, providerLocations, providerSchedules, providerSkills, providers } from '../../db/schema';
+import {
+  providerDocuments,
+  providerLocations,
+  providerSchedules,
+  providerSkills,
+  providers,
+} from '../../db/schema';
 import { errors } from '../../lib/errors';
 import { sha256 } from '../../lib/jwt';
 import { type Exec, iso } from '../_shared/util';
@@ -33,12 +39,19 @@ export interface ProviderSources {
 }
 
 export function maskDocument(doc: string): string {
-  return doc.length === 11 ? `***.${doc.slice(3, 6)}.${doc.slice(6, 9)}-**` : `**.${doc.slice(2, 5)}.${doc.slice(5, 8)}/****-**`;
+  return doc.length === 11
+    ? `***.${doc.slice(3, 6)}.${doc.slice(6, 9)}-**`
+    : `**.${doc.slice(2, 5)}.${doc.slice(5, 8)}/****-**`;
 }
 
 export function createProvidersService(
   ctx: AppContext,
-  deps: { identity: IdentityService; catalog: CatalogService; wallet: WalletService; platform: PlatformService },
+  deps: {
+    identity: IdentityService;
+    catalog: CatalogService;
+    wallet: WalletService;
+    platform: PlatformService;
+  },
 ) {
   const { db, adapters, outbox, log } = ctx;
   let sources: ProviderSources | null = null;
@@ -60,7 +73,11 @@ export function createProvidersService(
 
   async function toMe(p: ProviderRow): Promise<ProviderMe> {
     const skills = await skillsOf(p.id);
-    const docs = await db.select().from(providerDocuments).where(eq(providerDocuments.providerId, p.id)).orderBy(asc(providerDocuments.createdAt));
+    const docs = await db
+      .select()
+      .from(providerDocuments)
+      .where(eq(providerDocuments.providerId, p.id))
+      .orderBy(asc(providerDocuments.createdAt));
     return {
       id: p.id,
       userId: p.userId,
@@ -75,7 +92,11 @@ export function createProvidersService(
       acceptanceRate: p.acceptanceRate,
       cancellationRate: p.cancellationRate,
       avgResponseSeconds: p.avgResponseSeconds,
-      documents: docs.map((d) => ({ kind: d.kind, status: d.status as 'PENDING' | 'VERIFIED' | 'REJECTED', rejectedReason: d.rejectedReason })),
+      documents: docs.map((d) => ({
+        kind: d.kind,
+        status: d.status as 'PENDING' | 'VERIFIED' | 'REJECTED',
+        rejectedReason: d.rejectedReason,
+      })),
       walletBalanceCents: await deps.wallet.balance('PROVIDER', p.id),
     };
   }
@@ -96,7 +117,11 @@ export function createProvidersService(
     };
   }
 
-  async function setAvailabilityInternal(providerId: string, availability: ProviderAvailability, exec: Exec = db) {
+  async function setAvailabilityInternal(
+    providerId: string,
+    availability: ProviderAvailability,
+    exec: Exec = db,
+  ) {
     await exec.update(providers).set({ availability }).where(eq(providers.id, providerId));
   }
 
@@ -115,14 +140,22 @@ export function createProvidersService(
     },
 
     async userIdOf(providerId: string): Promise<string | null> {
-      const [p] = await db.select({ userId: providers.userId }).from(providers).where(eq(providers.id, providerId)).limit(1);
+      const [p] = await db
+        .select({ userId: providers.userId })
+        .from(providers)
+        .where(eq(providers.id, providerId))
+        .limit(1);
       return p?.userId ?? null;
     },
 
     async onboard(userId: string, input: ProviderOnboardingInput): Promise<ProviderMe> {
       if (await findByUserId(userId)) throw errors.conflict('Cadastro de prestador já existe');
       const documentHash = sha256(input.documentNumber);
-      const [dup] = await db.select({ id: providers.id }).from(providers).where(eq(providers.documentHash, documentHash)).limit(1);
+      const [dup] = await db
+        .select({ id: providers.id })
+        .from(providers)
+        .where(eq(providers.documentHash, documentHash))
+        .limit(1);
       if (dup) throw errors.conflict('Documento já cadastrado');
       for (const cid of input.categoryIds) await deps.catalog.getCategory(cid);
       const [p] = await db
@@ -145,7 +178,10 @@ export function createProvidersService(
         .returning();
       if (!p) throw new Error('Falha ao criar prestador');
       for (const cid of input.categoryIds) {
-        await db.insert(providerSkills).values({ providerId: p.id, categoryId: cid, level: 0.5 }).onConflictDoNothing();
+        await db
+          .insert(providerSkills)
+          .values({ providerId: p.id, categoryId: cid, level: 0.5 })
+          .onConflictDoNothing();
       }
       await deps.identity.addRole(userId, 'provider');
       log.info({ providerId: p.id }, 'prestador cadastrado (PENDING)');
@@ -157,7 +193,10 @@ export function createProvidersService(
       await db.insert(providerDocuments).values({ providerId, kind: input.kind, fileUrl: input.fileUrl });
     },
 
-    async setAvailability(providerId: string, input: { availability: ProviderAvailability; location?: { lat: number; lng: number } }): Promise<ProviderMe> {
+    async setAvailability(
+      providerId: string,
+      input: { availability: ProviderAvailability; location?: { lat: number; lng: number } },
+    ): Promise<ProviderMe> {
       const p = await getById(providerId);
       if (input.availability === 'ONLINE' && p.status !== 'APPROVED') {
         throw errors.forbidden('Somente prestadores aprovados podem ficar online');
@@ -188,9 +227,13 @@ export function createProvidersService(
      * Lote de pings de GPS: aplica a política de aceitação do domínio, grava histórico, atualiza a
      * última posição e retransmite para a sala da ordem ativa com ETA.
      */
-    async ingestLocation(providerId: string, pings: LocationPing[]): Promise<{ accepted: number; rejected: number }> {
+    async ingestLocation(
+      providerId: string,
+      pings: LocationPing[],
+    ): Promise<{ accepted: number; rejected: number }> {
       const p = await getById(providerId);
-      if (p.availability === 'OFFLINE' || p.availability === 'UNAVAILABLE') return { accepted: 0, rejected: pings.length };
+      if (p.availability === 'OFFLINE' || p.availability === 'UNAVAILABLE')
+        return { accepted: 0, rejected: pings.length };
       const settings = await deps.platform.getSettings();
       const active = sources ? await sources.activeLiveOrder(providerId) : null;
       let previous =
@@ -198,10 +241,17 @@ export function createProvidersService(
           ? { lat: p.lastLat, lng: p.lastLng, recordedAt: p.lastLocationAt }
           : null;
       let accepted = 0;
-      const sorted = [...pings].sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+      const sorted = [...pings].sort(
+        (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+      );
       for (const ping of sorted) {
         const current = { lat: ping.lat, lng: ping.lng, recordedAt: new Date(ping.recordedAt) };
-        const verdict = acceptPing({ accuracyM: ping.accuracyM ?? null, previous, current, maxAccuracyM: settings.location.maxAccuracyM });
+        const verdict = acceptPing({
+          accuracyM: ping.accuracyM ?? null,
+          previous,
+          current,
+          maxAccuracyM: settings.location.maxAccuracyM,
+        });
         if (!verdict.accept) continue;
         await db.insert(providerLocations).values({
           providerId,
@@ -216,7 +266,10 @@ export function createProvidersService(
         previous = current;
         accepted++;
         if (active) {
-          const distanceKm = active.lat !== null && active.lng !== null ? haversineKm(current, { lat: active.lat, lng: active.lng }) : null;
+          const distanceKm =
+            active.lat !== null && active.lng !== null
+              ? haversineKm(current, { lat: active.lat, lng: active.lng })
+              : null;
           await outbox.publish(db, {
             type: 'provider.location',
             aggregateType: 'order',
@@ -251,8 +304,18 @@ export function createProvidersService(
     },
 
     async getSchedule(providerId: string) {
-      const rows = await db.select().from(providerSchedules).where(eq(providerSchedules.providerId, providerId)).orderBy(asc(providerSchedules.weekday), asc(providerSchedules.startMinute));
-      return { windows: rows.map((r) => ({ weekday: r.weekday, startMinute: r.startMinute, endMinute: r.endMinute })) };
+      const rows = await db
+        .select()
+        .from(providerSchedules)
+        .where(eq(providerSchedules.providerId, providerId))
+        .orderBy(asc(providerSchedules.weekday), asc(providerSchedules.startMinute));
+      return {
+        windows: rows.map((r) => ({
+          weekday: r.weekday,
+          startMinute: r.startMinute,
+          endMinute: r.endMinute,
+        })),
+      };
     },
 
     /**
@@ -269,7 +332,13 @@ export function createProvidersService(
       const rows = await db
         .select({ p: providers, level: providerSkills.level })
         .from(providers)
-        .innerJoin(providerSkills, and(eq(providerSkills.providerId, sql`${providers.id}::text`), eq(providerSkills.categoryId, input.categoryId)))
+        .innerJoin(
+          providerSkills,
+          and(
+            eq(providerSkills.providerId, sql`${providers.id}::text`),
+            eq(providerSkills.categoryId, input.categoryId),
+          ),
+        )
         .where(
           and(
             eq(providers.status, 'APPROVED'),
@@ -281,10 +350,17 @@ export function createProvidersService(
           ),
         );
       const excluded = new Set(input.excludeProviderIds ?? []);
-      const filtered = rows.filter((r) => !excluded.has(r.p.id) && r.p.lastLat !== null && r.p.lastLng !== null);
+      const filtered = rows.filter(
+        (r) => !excluded.has(r.p.id) && r.p.lastLat !== null && r.p.lastLng !== null,
+      );
       const ids = filtered.map((r) => r.p.id);
-      const conflicts = input.window && sources ? await sources.providersWithBookingConflict(ids, input.window.startsAt, input.window.endsAt) : new Set<string>();
-      const served = sources ? await sources.providersWhoServedCustomer(ids, input.customerId) : new Set<string>();
+      const conflicts =
+        input.window && sources
+          ? await sources.providersWithBookingConflict(ids, input.window.startsAt, input.window.endsAt)
+          : new Set<string>();
+      const served = sources
+        ? await sources.providersWhoServedCustomer(ids, input.customerId)
+        : new Set<string>();
       const now = adapters.clock.now();
       return filtered.map(({ p, level }) => ({
         providerId: p.id,
@@ -299,16 +375,35 @@ export function createProvidersService(
         avgResponseSeconds: p.avgResponseSeconds,
         hasScheduleConflict: conflicts.has(p.id),
         servedCustomerBefore: served.has(p.id),
-        minutesSinceLastOrder: p.lastOrderCompletedAt ? Math.round((now.getTime() - p.lastOrderCompletedAt.getTime()) / 60000) : null,
+        minutesSinceLastOrder: p.lastOrderCompletedAt
+          ? Math.round((now.getTime() - p.lastOrderCompletedAt.getTime()) / 60000)
+          : null,
       }));
     },
 
-    async updateStats(providerId: string, stats: Partial<Pick<ProviderRow, 'ratingAvg' | 'ratingCount' | 'completedCount' | 'acceptanceRate' | 'cancellationRate' | 'avgResponseSeconds' | 'lastOrderCompletedAt'>>) {
+    async updateStats(
+      providerId: string,
+      stats: Partial<
+        Pick<
+          ProviderRow,
+          | 'ratingAvg'
+          | 'ratingCount'
+          | 'completedCount'
+          | 'acceptanceRate'
+          | 'cancellationRate'
+          | 'avgResponseSeconds'
+          | 'lastOrderCompletedAt'
+        >
+      >,
+    ) {
       await db.update(providers).set(stats).where(eq(providers.id, providerId));
     },
 
     async listOnline() {
-      return db.select().from(providers).where(and(eq(providers.status, 'APPROVED'), inArray(providers.availability, ['ONLINE', 'BUSY'])));
+      return db
+        .select()
+        .from(providers)
+        .where(and(eq(providers.status, 'APPROVED'), inArray(providers.availability, ['ONLINE', 'BUSY'])));
     },
 
     async listAll(limit = 200) {
@@ -317,10 +412,17 @@ export function createProvidersService(
     },
 
     /** Decisão administrativa: aprovar exige ao menos um documento, que passa a VERIFIED. */
-    async decide(providerId: string, input: z.infer<typeof ApproveProviderInput>, byUserId: string): Promise<ProviderMe> {
+    async decide(
+      providerId: string,
+      input: z.infer<typeof ApproveProviderInput>,
+      byUserId: string,
+    ): Promise<ProviderMe> {
       const p = await getById(providerId);
       const now = adapters.clock.now();
-      const docs = await db.select().from(providerDocuments).where(eq(providerDocuments.providerId, providerId));
+      const docs = await db
+        .select()
+        .from(providerDocuments)
+        .where(eq(providerDocuments.providerId, providerId));
       let status = p.status;
       let verifiedAt = p.verifiedAt;
       switch (input.decision) {
@@ -329,15 +431,24 @@ export function createProvidersService(
           await db
             .update(providerDocuments)
             .set({ status: 'VERIFIED', reviewedByUserId: byUserId, reviewedAt: now })
-            .where(and(eq(providerDocuments.providerId, providerId), eq(providerDocuments.status, 'PENDING')));
+            .where(
+              and(eq(providerDocuments.providerId, providerId), eq(providerDocuments.status, 'PENDING')),
+            );
           status = 'APPROVED';
           verifiedAt = now;
           break;
         case 'REJECT':
           await db
             .update(providerDocuments)
-            .set({ status: 'REJECTED', rejectedReason: input.reason ?? 'Documentação recusada', reviewedByUserId: byUserId, reviewedAt: now })
-            .where(and(eq(providerDocuments.providerId, providerId), eq(providerDocuments.status, 'PENDING')));
+            .set({
+              status: 'REJECTED',
+              rejectedReason: input.reason ?? 'Documentação recusada',
+              reviewedByUserId: byUserId,
+              reviewedAt: now,
+            })
+            .where(
+              and(eq(providerDocuments.providerId, providerId), eq(providerDocuments.status, 'PENDING')),
+            );
           status = 'PENDING';
           break;
         case 'SUSPEND':
@@ -365,7 +476,9 @@ export function createProvidersService(
     },
 
     lastLocationOf(p: ProviderRow) {
-      return p.lastLat !== null && p.lastLng !== null ? { lat: p.lastLat, lng: p.lastLng, at: iso(p.lastLocationAt) } : null;
+      return p.lastLat !== null && p.lastLng !== null
+        ? { lat: p.lastLat, lng: p.lastLng, at: iso(p.lastLocationAt) }
+        : null;
     },
   };
 }

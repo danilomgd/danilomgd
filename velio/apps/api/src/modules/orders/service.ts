@@ -10,21 +10,21 @@ import {
   type OrderStatus,
   type OrderTask,
   type Quote,
+  rooms,
   type ServiceOrder,
   type ServiceOrderDetail,
   TERMINAL_ORDER_STATUSES,
   type TransitionAction,
   type VehicleHandoverInput,
   type WorkflowKind,
-  rooms,
 } from '@velio/contracts';
 import {
-  type CouponSource,
-  type OrderSnapshot,
   allowedActions,
   applyTransition,
+  type CouponSource,
   estimatePrice,
   getWorkflow,
+  type OrderSnapshot,
   pinFromBytes,
   reminderTimes,
   scheduledMatchingStart,
@@ -51,11 +51,39 @@ import { type CatalogService, categoryConfig } from '../catalog/service';
 import type { GeoService } from '../geo/service';
 import type { IdentityService } from '../identity/service';
 import type { ProvidersService } from '../providers/service';
-import { type EffectContext, type EffectExecutor, type OrderActor, type OrderEventRow, type OrderRow, meta } from './types';
+import {
+  type EffectContext,
+  type EffectExecutor,
+  meta,
+  type OrderActor,
+  type OrderEventRow,
+  type OrderRow,
+} from './types';
 
-const LIVE_LOCATION_STATES = new Set<OrderStatus>(['EN_ROUTE', 'ARRIVED', 'EN_ROUTE_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'RETURN_PICKUP', 'RETURNING']);
-const PRE_EXECUTION_STATES = new Set<OrderStatus>(['SCHEDULED', 'MATCHING', 'OFFERED', 'ACCEPTED', 'REMINDED', 'NO_PROVIDER_FOUND']);
-const DONE_FOR_PARENT = new Set<OrderStatus>(['COMPLETED', 'REVIEWED', 'CLOSED', 'CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_PLATFORM']);
+const LIVE_LOCATION_STATES = new Set<OrderStatus>([
+  'EN_ROUTE',
+  'ARRIVED',
+  'EN_ROUTE_PICKUP',
+  'PICKED_UP',
+  'IN_TRANSIT',
+  'RETURN_PICKUP',
+  'RETURNING',
+]);
+const PRE_EXECUTION_STATES = new Set<OrderStatus>([
+  'SCHEDULED',
+  'MATCHING',
+  'OFFERED',
+  'ACCEPTED',
+  'REMINDED',
+  'NO_PROVIDER_FOUND',
+]);
+const DONE_FOR_PARENT = new Set<OrderStatus>([
+  'COMPLETED',
+  'REVIEWED',
+  'CLOSED',
+  'CANCELLED_BY_CUSTOMER',
+  'CANCELLED_BY_PLATFORM',
+]);
 
 /** Serviços de outros módulos ligados após a construção (evita dependência circular). */
 export interface OrdersLateDeps {
@@ -64,8 +92,19 @@ export interface OrdersLateDeps {
     hasAuthorizedInitial(exec: Exec, orderId: string): Promise<boolean>;
     getMethod(userId: string, id: string): Promise<{ id: string; kind: 'CARD' | 'PIX' | 'WALLET' }>;
     getDefaultMethod(userId: string): Promise<{ id: string; kind: 'CARD' | 'PIX' | 'WALLET' } | null>;
-    validateCoupon(code: string, userId: string | null, categoryId: string, now: Date): Promise<CouponSource | null>;
-    redeemCoupon(exec: Exec, code: string, userId: string, orderId: string, discountCents: number): Promise<void>;
+    validateCoupon(
+      code: string,
+      userId: string | null,
+      categoryId: string,
+      now: Date,
+    ): Promise<CouponSource | null>;
+    redeemCoupon(
+      exec: Exec,
+      code: string,
+      userId: string,
+      orderId: string,
+      discountCents: number,
+    ): Promise<void>;
     createInitialPixIntent(exec: Exec, order: OrderRow, methodId: string): Promise<{ id: string }>;
   };
   concierge: { hasPlan(exec: Exec, orderId: string): Promise<boolean> };
@@ -111,14 +150,24 @@ export function createOrdersService(
   }
 
   async function nextSeq(exec: Exec, orderId: string): Promise<number> {
-    const [r] = await exec.select({ m: max(orderEvents.seq) }).from(orderEvents).where(eq(orderEvents.orderId, orderId));
+    const [r] = await exec
+      .select({ m: max(orderEvents.seq) })
+      .from(orderEvents)
+      .where(eq(orderEvents.orderId, orderId));
     return Number(r?.m ?? 0) + 1;
   }
 
   async function appendEvent(
     exec: Exec,
     orderId: string,
-    e: { type: string; action?: TransitionAction | null; from?: OrderStatus | null; to?: OrderStatus | null; actor: OrderActor; payload?: Record<string, unknown> },
+    e: {
+      type: string;
+      action?: TransitionAction | null;
+      from?: OrderStatus | null;
+      to?: OrderStatus | null;
+      actor: OrderActor;
+      payload?: Record<string, unknown>;
+    },
   ): Promise<OrderEventRow> {
     const seq = await nextSeq(exec, orderId);
     const [row] = await exec
@@ -144,9 +193,15 @@ export function createOrdersService(
   // ---------------------------------------------------------------------------------------------
   async function buildSnapshot(exec: Exec, o: OrderRow): Promise<OrderSnapshot> {
     const l = L();
-    const evidence = await exec.select({ kind: mediaEvidence.kind }).from(mediaEvidence).where(eq(mediaEvidence.orderId, o.id));
+    const evidence = await exec
+      .select({ kind: mediaEvidence.kind })
+      .from(mediaEvidence)
+      .where(eq(mediaEvidence.orderId, o.id));
     const quotes = await l.quotes.listForOrder(exec, o.id);
-    const children = await exec.select({ status: serviceOrders.status }).from(serviceOrders).where(eq(serviceOrders.parentOrderId, o.id));
+    const children = await exec
+      .select({ status: serviceOrders.status })
+      .from(serviceOrders)
+      .where(eq(serviceOrders.parentOrderId, o.id));
     const [scan] = await exec
       .select({ id: custodyEvents.id })
       .from(custodyEvents)
@@ -191,7 +246,14 @@ export function createOrdersService(
   // ---------------------------------------------------------------------------------------------
   // Transição genérica
   // ---------------------------------------------------------------------------------------------
-  function columnPatch(action: TransitionAction, to: OrderStatus, o: OrderRow, actor: OrderActor, payload: Record<string, unknown>, now: Date): Partial<typeof serviceOrders.$inferInsert> {
+  function columnPatch(
+    action: TransitionAction,
+    _to: OrderStatus,
+    o: OrderRow,
+    actor: OrderActor,
+    payload: Record<string, unknown>,
+    now: Date,
+  ): Partial<typeof serviceOrders.$inferInsert> {
     const patch: Partial<typeof serviceOrders.$inferInsert> = {};
     const m = meta(o);
     switch (action) {
@@ -201,7 +263,8 @@ export function createOrdersService(
         break;
       case 'provider.accept':
       case 'operator.assign': {
-        const providerId = action === 'provider.accept' ? actor.providerId : (payload.providerId as string | undefined);
+        const providerId =
+          action === 'provider.accept' ? actor.providerId : (payload.providerId as string | undefined);
         if (!providerId) throw errors.badRequest('providerId obrigatório para atribuição');
         patch.providerId = providerId;
         patch.acceptedAt = now;
@@ -212,7 +275,10 @@ export function createOrdersService(
         patch.acceptedAt = null;
         patch.matchingStartedAt = now; // novo ciclo de matching
         patch.dispatchWave = 0;
-        patch.metadata = { ...m, excludedProviderIds: [...(m.excludedProviderIds ?? []), ...(o.providerId ? [o.providerId] : [])] };
+        patch.metadata = {
+          ...m,
+          excludedProviderIds: [...(m.excludedProviderIds ?? []), ...(o.providerId ? [o.providerId] : [])],
+        };
         break;
       case 'provider.start':
         patch.startedAt = now;
@@ -248,7 +314,12 @@ export function createOrdersService(
     effects: EffectContext & { names: string[] };
   }
 
-  async function transitionTx(orderId: string, action: TransitionAction, actor: OrderActor, payload: Record<string, unknown>): Promise<TransitionOutcome> {
+  async function transitionTx(
+    orderId: string,
+    action: TransitionAction,
+    actor: OrderActor,
+    payload: Record<string, unknown>,
+  ): Promise<TransitionOutcome> {
     const now = adapters.clock.now();
     return db.transaction(async (tx) => {
       const base = tx.select().from(serviceOrders).where(eq(serviceOrders.id, orderId)).limit(1);
@@ -273,19 +344,47 @@ export function createOrdersService(
         .where(and(eq(serviceOrders.id, o.id), eq(serviceOrders.version, o.version)))
         .returning();
       if (!updated) throw errors.conflict('Ordem alterada simultaneamente; tente novamente');
-      const safePayload = Object.fromEntries(Object.entries(payload).filter(([k]) => k !== 'pin' && k !== 'customerConfirmationPin'));
-      const event = await appendEvent(tx, o.id, { type: 'order.transitioned', action, from: o.status as OrderStatus, to: r.to, actor, payload: safePayload });
+      const safePayload = Object.fromEntries(
+        Object.entries(payload).filter(([k]) => k !== 'pin' && k !== 'customerConfirmationPin'),
+      );
+      const event = await appendEvent(tx, o.id, {
+        type: 'order.transitioned',
+        action,
+        from: o.status as OrderStatus,
+        to: r.to,
+        actor,
+        payload: safePayload,
+      });
       await outbox.publish(tx, {
         type: 'order.transitioned',
         aggregateType: 'order',
         aggregateId: o.id,
-        payload: { orderId: o.id, from: o.status, to: r.to, action, eventId: event.id, seq: event.seq, customerId: o.customerId, providerId: updated.providerId ?? o.providerId, updatedAt: now.toISOString() },
+        payload: {
+          orderId: o.id,
+          from: o.status,
+          to: r.to,
+          action,
+          eventId: event.id,
+          seq: event.seq,
+          customerId: o.customerId,
+          providerId: updated.providerId ?? o.providerId,
+          updatedAt: now.toISOString(),
+        },
       });
       return {
         order: updated,
         previous: o,
         event,
-        effects: { order: updated, previous: o, action, actor, payload, now, eventId: event.id, names: r.effects },
+        effects: {
+          order: updated,
+          previous: o,
+          action,
+          actor,
+          payload,
+          now,
+          eventId: event.id,
+          names: r.effects,
+        },
       };
     });
   }
@@ -304,7 +403,11 @@ export function createOrdersService(
       } catch (err) {
         // Efeitos são pós-commit: falha não desfaz a transição; fica registrado para operação.
         log.error({ err, effect: name, orderId: c.order.id, action: c.action }, 'efeito falhou');
-        await appendEvent(db, c.order.id, { type: 'effect.failed', actor: { type: 'system', userId: null }, payload: { effect: name, action: c.action, error: String((err as Error).message) } }).catch(() => undefined);
+        await appendEvent(db, c.order.id, {
+          type: 'effect.failed',
+          actor: { type: 'system', userId: null },
+          payload: { effect: name, action: c.action, error: String((err as Error).message) },
+        }).catch(() => undefined);
       }
     }
     try {
@@ -314,14 +417,24 @@ export function createOrdersService(
     }
   }
 
-  async function transition(orderId: string, action: TransitionAction, actor: OrderActor, payload: Record<string, unknown> = {}): Promise<OrderRow> {
+  async function transition(
+    orderId: string,
+    action: TransitionAction,
+    actor: OrderActor,
+    payload: Record<string, unknown> = {},
+  ): Promise<OrderRow> {
     const out = await transitionTx(orderId, action, actor, payload);
     await runEffects(out);
     return (await findById(orderId)) ?? out.order;
   }
 
   /** Variante para jobs: ignora transição inválida (ordem já mudou de estado). */
-  async function tryTransition(orderId: string, action: TransitionAction, actor: OrderActor, payload: Record<string, unknown> = {}): Promise<OrderRow | null> {
+  async function tryTransition(
+    orderId: string,
+    action: TransitionAction,
+    actor: OrderActor,
+    payload: Record<string, unknown> = {},
+  ): Promise<OrderRow | null> {
     try {
       return await transition(orderId, action, actor, payload);
     } catch (err) {
@@ -338,7 +451,12 @@ export function createOrdersService(
   // ---------------------------------------------------------------------------------------------
   async function scheduleDispatch(exec: Exec, o: OrderRow, now: Date) {
     const runAt = o.scheduledFor ? scheduledMatchingStart(o.scheduledFor, now) : now;
-    await scheduler.schedule(exec, { kind: 'dispatch.start', runAt, payload: { orderId: o.id }, dedupeKey: `dispatch.start:${o.id}` });
+    await scheduler.schedule(exec, {
+      kind: 'dispatch.start',
+      runAt,
+      payload: { orderId: o.id },
+      dedupeKey: `dispatch.start:${o.id}`,
+    });
   }
 
   async function ensureBookingAndReminders(exec: Exec, o: OrderRow, now: Date, durationMin: number | null) {
@@ -347,14 +465,26 @@ export function createOrdersService(
     await exec
       .insert(bookings)
       .values({ orderId: o.id, providerId: o.providerId, startsAt: o.scheduledFor, endsAt })
-      .onConflictDoUpdate({ target: bookings.orderId, set: { providerId: o.providerId, startsAt: o.scheduledFor, endsAt, releasedAt: null } });
+      .onConflictDoUpdate({
+        target: bookings.orderId,
+        set: { providerId: o.providerId, startsAt: o.scheduledFor, endsAt, releasedAt: null },
+      });
     for (const t of reminderTimes(o.scheduledFor, now)) {
       const hours = Math.round((o.scheduledFor.getTime() - t.getTime()) / 3_600_000);
-      await scheduler.schedule(exec, { kind: 'booking.remind', runAt: t, payload: { orderId: o.id, hours }, dedupeKey: `booking.remind:${o.id}:${hours}h` });
+      await scheduler.schedule(exec, {
+        kind: 'booking.remind',
+        runAt: t,
+        payload: { orderId: o.id, hours },
+        dedupeKey: `booking.remind:${o.id}:${hours}h`,
+      });
     }
   }
 
-  async function createRequest(customerId: string, input: CreateServiceRequestInput, internal: CreateInternalOptions = {}): Promise<OrderRow> {
+  async function createRequest(
+    customerId: string,
+    input: CreateServiceRequestInput,
+    internal: CreateInternalOptions = {},
+  ): Promise<OrderRow> {
     const l = L();
     const now = adapters.clock.now();
     const actor: OrderActor = internal.actor ?? { type: 'customer', userId: customerId };
@@ -363,10 +493,19 @@ export function createOrdersService(
       const [existing] = await db
         .select({ id: serviceRequests.id })
         .from(serviceRequests)
-        .where(and(eq(serviceRequests.customerId, customerId), eq(serviceRequests.idempotencyKey, input.idempotencyKey)))
+        .where(
+          and(
+            eq(serviceRequests.customerId, customerId),
+            eq(serviceRequests.idempotencyKey, input.idempotencyKey),
+          ),
+        )
         .limit(1);
       if (existing) {
-        const [o] = await db.select().from(serviceOrders).where(eq(serviceOrders.requestId, existing.id)).limit(1);
+        const [o] = await db
+          .select()
+          .from(serviceOrders)
+          .where(eq(serviceOrders.requestId, existing.id))
+          .limit(1);
         if (o) return o;
       }
     }
@@ -384,19 +523,27 @@ export function createOrdersService(
     if (input.schedule.mode === 'SCHEDULED') {
       if (!service.allowsScheduling) throw errors.unprocessable('Este serviço não aceita agendamento');
       scheduledFor = new Date(input.schedule.startsAt);
-      if (scheduledFor.getTime() <= now.getTime()) throw errors.unprocessable('Horário agendado deve estar no futuro');
+      if (scheduledFor.getTime() <= now.getTime())
+        throw errors.unprocessable('Horário agendado deve estar no futuro');
       windowMinutes = input.schedule.windowMinutes;
     } else if (!service.allowsImmediate && !relax) {
       throw errors.unprocessable('Este serviço precisa ser agendado');
     }
 
     const address = input.addressId ? await deps.geo.getAddress(customerId, input.addressId) : null;
-    if (service.requiresAddress && !address && !relax) throw errors.unprocessable('Endereço obrigatório para este serviço');
+    if (service.requiresAddress && !address && !relax)
+      throw errors.unprocessable('Endereço obrigatório para este serviço');
     const vehicle = input.vehicleId ? await deps.assets.getVehicle(customerId, input.vehicleId) : null;
-    if ((service.requiresVehicle || cfg.requiresVehicle) && !vehicle && !relax) throw errors.unprocessable('Veículo obrigatório para este serviço');
-    const equipment = input.equipmentId ? await deps.assets.getEquipment(customerId, input.equipmentId) : null;
-    if ((service.requiresEquipment || cfg.requiresEquipment) && !equipment && !relax) throw errors.unprocessable('Equipamento obrigatório para este serviço');
-    const destination = input.destinationAddressId ? await deps.geo.getAddress(customerId, input.destinationAddressId) : null;
+    if ((service.requiresVehicle || cfg.requiresVehicle) && !vehicle && !relax)
+      throw errors.unprocessable('Veículo obrigatório para este serviço');
+    const equipment = input.equipmentId
+      ? await deps.assets.getEquipment(customerId, input.equipmentId)
+      : null;
+    if ((service.requiresEquipment || cfg.requiresEquipment) && !equipment && !relax)
+      throw errors.unprocessable('Equipamento obrigatório para este serviço');
+    const destination = input.destinationAddressId
+      ? await deps.geo.getAddress(customerId, input.destinationAddressId)
+      : null;
 
     const lat = address ? Number(address.lat) : null;
     const lng = address ? Number(address.lng) : null;
@@ -404,22 +551,31 @@ export function createOrdersService(
 
     // Preço: regra por região + opções + cupom (validado pelo módulo payments).
     const src = await deps.catalog.getPriceSource(service.id, region?.id ?? null);
-    const coupon = input.couponCode ? await l.payments.validateCoupon(input.couponCode.toUpperCase(), customerId, category.id, now) : null;
+    const coupon = input.couponCode
+      ? await l.payments.validateCoupon(input.couponCode.toUpperCase(), customerId, category.id, now)
+      : null;
     if (input.couponCode && !coupon) throw errors.unprocessable('Cupom inválido ou expirado');
     const estimate = estimatePrice(src, input.options, coupon);
-    let priceCents = internal.priceOverrideCents !== undefined ? internal.priceOverrideCents : (estimate.totalCents ?? estimate.minCents ?? null);
+    let priceCents =
+      internal.priceOverrideCents !== undefined
+        ? internal.priceOverrideCents
+        : (estimate.totalCents ?? estimate.minCents ?? null);
     const discountCents = internal.priceOverrideCents !== undefined ? 0 : estimate.discountCents;
-    if (internal.priceOverrideCents === undefined && estimate.pricingModel === 'RANGE') priceCents = estimate.minCents;
+    if (internal.priceOverrideCents === undefined && estimate.pricingModel === 'RANGE')
+      priceCents = estimate.minCents;
     const totalCents = priceCents === null ? null : Math.max(0, priceCents - discountCents);
 
     // Método de pagamento: informado ou padrão; PIX gera cobrança antecipada (doc 11 §7).
     const chargeNeeded = (totalCents ?? 0) > 0 && !internal.billedViaParent;
     let method: { id: string; kind: 'CARD' | 'PIX' | 'WALLET' } | null = null;
     if (chargeNeeded) {
-      method = input.paymentMethodId ? await l.payments.getMethod(customerId, input.paymentMethodId) : await l.payments.getDefaultMethod(customerId);
+      method = input.paymentMethodId
+        ? await l.payments.getMethod(customerId, input.paymentMethodId)
+        : await l.payments.getDefaultMethod(customerId);
     }
 
-    const requiresCustody = cfg.requiresCustody || kind === 'LAUNDRY' || (kind === 'LOGISTICS' && vehicle !== null);
+    const requiresCustody =
+      cfg.requiresCustody || kind === 'LAUNDRY' || (kind === 'LOGISTICS' && vehicle !== null);
     const flags = {
       requiresStartPin: cfg.requiresStartPin,
       requiresBeforeAfterPhotos: cfg.requiresBeforeAfterPhotos,
@@ -435,7 +591,9 @@ export function createOrdersService(
       billedViaParent: internal.billedViaParent === true,
       vehicleId: vehicle?.id ?? null,
       vehiclePlate: vehicle?.plate ?? null,
-      equipmentIds: equipment ? [equipment.id] : ((internal.metadata?.equipmentIds as string[] | undefined) ?? []),
+      equipmentIds: equipment
+        ? [equipment.id]
+        : ((internal.metadata?.equipmentIds as string[] | undefined) ?? []),
       neighborhood: address?.neighborhood ?? null,
       city: address?.city ?? null,
       awaitingPixPayment: chargeNeeded && method?.kind === 'PIX',
@@ -478,11 +636,15 @@ export function createOrdersService(
           status: def.initial,
           scheduledFor,
           windowMinutes,
-          addressSummary: address ? `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ''} — ${address.neighborhood}, ${address.city}` : null,
+          addressSummary: address
+            ? `${address.street}, ${address.number}${address.complement ? ` - ${address.complement}` : ''} — ${address.neighborhood}, ${address.city}`
+            : null,
           lat,
           lng,
           addressInstructions: address?.instructions ?? null,
-          destinationSummary: destination ? `${destination.street}, ${destination.number} — ${destination.neighborhood}, ${destination.city}` : null,
+          destinationSummary: destination
+            ? `${destination.street}, ${destination.number} — ${destination.neighborhood}, ${destination.city}`
+            : null,
           destinationLat: destination ? Number(destination.lat) : null,
           destinationLng: destination ? Number(destination.lng) : null,
           priceCents,
@@ -497,9 +659,20 @@ export function createOrdersService(
         .returning();
       if (!order) throw new Error('Falha ao criar ordem');
 
-      await appendEvent(tx, order.id, { type: 'order.created', to: def.initial, actor, payload: { serviceId: service.id, kind, scheduledFor: iso(scheduledFor), priceCents, discountCents } });
-      if (coupon && discountCents > 0) await l.payments.redeemCoupon(tx, coupon.code, customerId, order.id, discountCents);
-      await outbox.publish(tx, { type: 'order.created', aggregateType: 'order', aggregateId: order.id, payload: { orderId: order.id, customerId, status: order.status, kind } });
+      await appendEvent(tx, order.id, {
+        type: 'order.created',
+        to: def.initial,
+        actor,
+        payload: { serviceId: service.id, kind, scheduledFor: iso(scheduledFor), priceCents, discountCents },
+      });
+      if (coupon && discountCents > 0)
+        await l.payments.redeemCoupon(tx, coupon.code, customerId, order.id, discountCents);
+      await outbox.publish(tx, {
+        type: 'order.created',
+        aggregateType: 'order',
+        aggregateId: order.id,
+        payload: { orderId: order.id, customerId, status: order.status, kind },
+      });
 
       if (chargeNeeded && method?.kind === 'PIX') {
         // PIX: cobrança nasce agora; o matching só começa após o webhook PAID (payment.pix_timeout cancela em 15 min).
@@ -511,7 +684,12 @@ export function createOrdersService(
           dedupeKey: `payment.pix_timeout:${order.id}`,
         });
       } else if (kind === 'CONCIERGE') {
-        await scheduler.schedule(tx, { kind: 'concierge.plan', runAt: now, payload: { orderId: order.id }, dedupeKey: `concierge.plan:${order.id}` });
+        await scheduler.schedule(tx, {
+          kind: 'concierge.plan',
+          runAt: now,
+          payload: { orderId: order.id },
+          dedupeKey: `concierge.plan:${order.id}`,
+        });
       } else {
         await scheduleDispatch(tx, order, now);
       }
@@ -544,7 +722,9 @@ export function createOrdersService(
   async function toDto(o: OrderRow, viewer: OrderActor | null = null): Promise<ServiceOrder> {
     const service = await deps.catalog.getServiceRow(o.serviceId);
     const category = await deps.catalog.getCategory(o.categoryId);
-    const provider = o.providerId ? await deps.providers.toPublic(await deps.providers.getById(o.providerId)) : null;
+    const provider = o.providerId
+      ? await deps.providers.toPublic(await deps.providers.getById(o.providerId))
+      : null;
     // O PIN é segredo do cliente: o prestador nunca o recebe pela API.
     const showPin = viewer === null || viewer.type === 'customer' || viewer.type === 'operator';
     return {
@@ -562,8 +742,14 @@ export function createOrdersService(
       scheduledFor: iso(o.scheduledFor),
       windowMinutes: o.windowMinutes,
       etaAt: iso(o.etaAt),
-      address: o.lat !== null && o.lng !== null ? { summary: o.addressSummary ?? '', lat: o.lat, lng: o.lng, instructions: o.addressInstructions } : null,
-      destination: o.destinationLat !== null && o.destinationLng !== null ? { summary: o.destinationSummary ?? '', lat: o.destinationLat, lng: o.destinationLng } : null,
+      address:
+        o.lat !== null && o.lng !== null
+          ? { summary: o.addressSummary ?? '', lat: o.lat, lng: o.lng, instructions: o.addressInstructions }
+          : null,
+      destination:
+        o.destinationLat !== null && o.destinationLng !== null
+          ? { summary: o.destinationSummary ?? '', lat: o.destinationLat, lng: o.destinationLng }
+          : null,
       priceCents: o.priceCents,
       additionalApprovedCents: o.additionalApprovedCents,
       discountCents: o.discountCents,
@@ -584,9 +770,17 @@ export function createOrdersService(
 
   async function toDetail(o: OrderRow, actor: OrderActor): Promise<ServiceOrderDetail> {
     const base = await toDto(o, actor);
-    const events = await db.select().from(orderEvents).where(eq(orderEvents.orderId, o.id)).orderBy(asc(orderEvents.seq));
+    const events = await db
+      .select()
+      .from(orderEvents)
+      .where(eq(orderEvents.orderId, o.id))
+      .orderBy(asc(orderEvents.seq));
     const quotes = await L().quotes.listForOrder(db, o.id);
-    const tasks = await db.select().from(orderTasks).where(eq(orderTasks.orderId, o.id)).orderBy(asc(orderTasks.seq));
+    const tasks = await db
+      .select()
+      .from(orderTasks)
+      .where(eq(orderTasks.orderId, o.id))
+      .orderBy(asc(orderTasks.seq));
     const snapshot = await buildSnapshot(db, o);
     return {
       ...base,
@@ -605,7 +799,10 @@ export function createOrdersService(
           payload: t.payload,
         }),
       ),
-      allowedActions: allowedActions(workflowOf(o), snapshot, actor, { now: adapters.clock.now(), payload: {} }),
+      allowedActions: allowedActions(workflowOf(o), snapshot, actor, {
+        now: adapters.clock.now(),
+        payload: {},
+      }),
     };
   }
 
@@ -615,7 +812,12 @@ export function createOrdersService(
   const terminal = [...TERMINAL_ORDER_STATUSES];
 
   async function list(where: ReturnType<typeof and>, q: z.infer<typeof OrderListQuery>) {
-    const scope = q.scope === 'active' ? notInArray(serviceOrders.status, terminal) : q.scope === 'history' ? inArray(serviceOrders.status, terminal) : undefined;
+    const scope =
+      q.scope === 'active'
+        ? notInArray(serviceOrders.status, terminal)
+        : q.scope === 'history'
+          ? inArray(serviceOrders.status, terminal)
+          : undefined;
     const cursor = q.cursor ? lt(serviceOrders.id, q.cursor) : undefined;
     const rows = await db
       .select()
@@ -627,7 +829,12 @@ export function createOrdersService(
     return { items: await Promise.all(p.items.map((o) => toDto(o))), nextCursor: p.nextCursor };
   }
 
-  async function canUserAccessOrder(userId: string, roles: string[], providerId: string | null, orderId: string): Promise<boolean> {
+  async function canUserAccessOrder(
+    userId: string,
+    roles: string[],
+    providerId: string | null,
+    orderId: string,
+  ): Promise<boolean> {
     if (roles.includes('operator') || roles.includes('admin')) return true;
     const o = await findById(orderId);
     if (!o) return false;
@@ -635,20 +842,49 @@ export function createOrdersService(
     return providerId !== null && o.providerId === providerId;
   }
 
-  async function requireOrderFor(orderId: string, auth: { userId: string; roles: string[]; providerId: string | null }): Promise<OrderRow> {
+  async function requireOrderFor(
+    orderId: string,
+    auth: { userId: string; roles: string[]; providerId: string | null },
+  ): Promise<OrderRow> {
     const o = await getById(orderId);
-    if (!(await canUserAccessOrder(auth.userId, auth.roles, auth.providerId, orderId))) throw errors.forbidden('Sem acesso a esta ordem');
+    if (!(await canUserAccessOrder(auth.userId, auth.roles, auth.providerId, orderId)))
+      throw errors.forbidden('Sem acesso a esta ordem');
     return o;
   }
 
   // ---------------------------------------------------------------------------------------------
   // Evidências, custódia e handover
   // ---------------------------------------------------------------------------------------------
-  async function addEvidence(orderId: string, userId: string, input: z.infer<typeof EvidenceInput>): Promise<MediaEvidence> {
-    const [row] = await db.insert(mediaEvidence).values({ orderId, kind: input.kind, url: input.url, metadata: input.metadata, createdByUserId: userId }).returning();
+  async function addEvidence(
+    orderId: string,
+    userId: string,
+    input: z.infer<typeof EvidenceInput>,
+  ): Promise<MediaEvidence> {
+    const [row] = await db
+      .insert(mediaEvidence)
+      .values({
+        orderId,
+        kind: input.kind,
+        url: input.url,
+        metadata: input.metadata,
+        createdByUserId: userId,
+      })
+      .returning();
     if (!row) throw new Error('Falha ao gravar evidência');
-    await appendEvent(db, orderId, { type: 'evidence.added', actor: { type: 'provider', userId }, payload: { kind: input.kind, evidenceId: row.id } });
-    return { id: row.id, orderId, kind: input.kind, url: row.url, metadata: row.metadata, createdByUserId: userId, createdAt: row.createdAt.toISOString() };
+    await appendEvent(db, orderId, {
+      type: 'evidence.added',
+      actor: { type: 'provider', userId },
+      payload: { kind: input.kind, evidenceId: row.id },
+    });
+    return {
+      id: row.id,
+      orderId,
+      kind: input.kind,
+      url: row.url,
+      metadata: row.metadata,
+      createdByUserId: userId,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
   const CUSTODY_PARTIES: Partial<Record<OrderStatus, { from: string; to: string }>> = {
@@ -660,18 +896,28 @@ export function createOrdersService(
   };
 
   /** Leitura do QR/placa: valida o código e registra a custódia para a etapa atual. */
-  async function custodyScan(orderId: string, user: { userId: string; providerId: string | null }, input: z.infer<typeof CustodyScanInput>): Promise<void> {
+  async function custodyScan(
+    orderId: string,
+    user: { userId: string; providerId: string | null },
+    input: z.infer<typeof CustodyScanInput>,
+  ): Promise<void> {
     const o = await getById(orderId);
-    if (!o.providerId || o.providerId !== user.providerId) throw errors.forbidden('Somente o prestador atribuído registra custódia');
+    if (!o.providerId || o.providerId !== user.providerId)
+      throw errors.forbidden('Somente o prestador atribuído registra custódia');
     const code = input.itemCode.toUpperCase().replace(/[^A-Z0-9-]/g, '');
     const plate = (meta(o).vehiclePlate ?? '').toUpperCase();
     const custody = (o.custodyCode ?? '').toUpperCase();
     const matchesCustody = Boolean(custody) && (code === custody || code === custody.replace('-', ''));
     const matchesPlate = Boolean(plate) && code.replace('-', '') === plate;
-    if (!matchesCustody && !matchesPlate) throw errors.unprocessable('Código não corresponde ao item desta ordem');
+    if (!matchesCustody && !matchesPlate)
+      throw errors.unprocessable('Código não corresponde ao item desta ordem');
     // Item canônico: a placa identifica veículos; o código de custódia identifica os demais itens.
     const itemCode = matchesPlate ? plate : custody;
-    const [dup] = await db.select({ id: custodyEvents.id }).from(custodyEvents).where(and(eq(custodyEvents.orderId, orderId), eq(custodyEvents.step, o.status))).limit(1);
+    const [dup] = await db
+      .select({ id: custodyEvents.id })
+      .from(custodyEvents)
+      .where(and(eq(custodyEvents.orderId, orderId), eq(custodyEvents.step, o.status)))
+      .limit(1);
     if (dup) return;
     const parties = CUSTODY_PARTIES[o.status as OrderStatus] ?? { from: 'PROVIDER', to: 'PROVIDER' };
     await db.insert(custodyEvents).values({
@@ -686,13 +932,21 @@ export function createOrdersService(
       photoUrl: input.photoUrl ?? null,
       note: input.note ?? null,
     });
-    await appendEvent(db, orderId, { type: 'custody.scanned', actor: { type: 'provider', userId: user.userId, providerId: user.providerId }, payload: { step: o.status } });
+    await appendEvent(db, orderId, {
+      type: 'custody.scanned',
+      actor: { type: 'provider', userId: user.userId, providerId: user.providerId },
+      payload: { step: o.status },
+    });
   }
 
   /** Efeito `custody.record`: garante um CustodyEvent para a etapa que acabou de ser concluída. */
   async function recordCustodyForTransition(c: EffectContext): Promise<void> {
     const step = c.previous.status as OrderStatus;
-    const [existing] = await db.select({ id: custodyEvents.id }).from(custodyEvents).where(and(eq(custodyEvents.orderId, c.order.id), eq(custodyEvents.step, step))).limit(1);
+    const [existing] = await db
+      .select({ id: custodyEvents.id })
+      .from(custodyEvents)
+      .where(and(eq(custodyEvents.orderId, c.order.id), eq(custodyEvents.step, step)))
+      .limit(1);
     if (existing) return;
     const parties = CUSTODY_PARTIES[step] ?? { from: 'PROVIDER', to: 'PROVIDER' };
     await db.insert(custodyEvents).values({
@@ -708,13 +962,20 @@ export function createOrdersService(
     });
   }
 
-  async function vehicleHandover(orderId: string, user: { userId: string; providerId: string | null }, step: 'PICKUP' | 'DELIVERY', input: z.infer<typeof VehicleHandoverInput>): Promise<void> {
+  async function vehicleHandover(
+    orderId: string,
+    user: { userId: string; providerId: string | null },
+    step: 'PICKUP' | 'DELIVERY',
+    input: z.infer<typeof VehicleHandoverInput>,
+  ): Promise<void> {
     const o = await getById(orderId);
-    if (!o.providerId || o.providerId !== user.providerId) throw errors.forbidden('Somente o prestador atribuído registra a entrega do veículo');
+    if (!o.providerId || o.providerId !== user.providerId)
+      throw errors.forbidden('Somente o prestador atribuído registra a entrega do veículo');
     if (!o.flags.requiresVehicleHandover) throw errors.unprocessable('Esta ordem não envolve veículo');
     let customerConfirmed: string | null = null;
     if (input.customerConfirmationPin) {
-      if (!o.startPin || input.customerConfirmationPin !== o.startPin) throw errors.unprocessable('PIN de confirmação do cliente inválido');
+      if (!o.startPin || input.customerConfirmationPin !== o.startPin)
+        throw errors.unprocessable('PIN de confirmação do cliente inválido');
       customerConfirmed = adapters.clock.now().toISOString();
     }
     await db.insert(vehicleHandovers).values({
@@ -729,9 +990,19 @@ export function createOrdersService(
     });
     // As fotos do handover são a evidência da etapa (PICKUP/DELIVERY).
     for (const url of input.photoUrls) {
-      await db.insert(mediaEvidence).values({ orderId, kind: step, url, metadata: { odometerKm: input.odometerKm }, createdByUserId: user.userId });
+      await db.insert(mediaEvidence).values({
+        orderId,
+        kind: step,
+        url,
+        metadata: { odometerKm: input.odometerKm },
+        createdByUserId: user.userId,
+      });
     }
-    await appendEvent(db, orderId, { type: 'vehicle.handover', actor: { type: 'provider', userId: user.userId, providerId: user.providerId }, payload: { step, odometerKm: input.odometerKm } });
+    await appendEvent(db, orderId, {
+      type: 'vehicle.handover',
+      actor: { type: 'provider', userId: user.userId, providerId: user.providerId },
+      payload: { step, odometerKm: input.odometerKm },
+    });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -739,7 +1010,10 @@ export function createOrdersService(
   // ---------------------------------------------------------------------------------------------
   async function patchMetadata(orderId: string, patch: Record<string, unknown>) {
     const o = await getById(orderId);
-    await db.update(serviceOrders).set({ metadata: { ...meta(o), ...patch } }).where(eq(serviceOrders.id, orderId));
+    await db
+      .update(serviceOrders)
+      .set({ metadata: { ...meta(o), ...patch } })
+      .where(eq(serviceOrders.id, orderId));
   }
 
   return {
@@ -764,8 +1038,10 @@ export function createOrdersService(
     patchMetadata,
     appendEvent: (orderId: string, e: Parameters<typeof appendEvent>[2]) => appendEvent(db, orderId, e),
 
-    listForCustomer: (userId: string, q: z.infer<typeof OrderListQuery>) => list(eq(serviceOrders.customerId, userId), q),
-    listForProvider: (providerId: string, q: z.infer<typeof OrderListQuery>) => list(eq(serviceOrders.providerId, providerId), q),
+    listForCustomer: (userId: string, q: z.infer<typeof OrderListQuery>) =>
+      list(eq(serviceOrders.customerId, userId), q),
+    listForProvider: (providerId: string, q: z.infer<typeof OrderListQuery>) =>
+      list(eq(serviceOrders.providerId, providerId), q),
 
     async setPaymentMethod(orderId: string, method: { id: string; kind: 'CARD' | 'PIX' | 'WALLET' }) {
       await patchMetadata(orderId, { paymentMethodId: method.id, paymentMethodKind: method.kind });
@@ -776,12 +1052,18 @@ export function createOrdersService(
       const additional = o.additionalApprovedCents + amountCents;
       await db
         .update(serviceOrders)
-        .set({ additionalApprovedCents: additional, totalCents: Math.max(0, (o.priceCents ?? 0) + additional - o.discountCents) })
+        .set({
+          additionalApprovedCents: additional,
+          totalCents: Math.max(0, (o.priceCents ?? 0) + additional - o.discountCents),
+        })
         .where(eq(serviceOrders.id, orderId));
     },
 
     async setFinancials(orderId: string, f: { platformFeeCents: number; providerPayoutCents: number }) {
-      await db.update(serviceOrders).set({ platformFeeCents: f.platformFeeCents, providerPayoutCents: f.providerPayoutCents }).where(eq(serviceOrders.id, orderId));
+      await db
+        .update(serviceOrders)
+        .set({ platformFeeCents: f.platformFeeCents, providerPayoutCents: f.providerPayoutCents })
+        .where(eq(serviceOrders.id, orderId));
     },
 
     async setCancellationFee(orderId: string, fee: number) {
@@ -799,7 +1081,12 @@ export function createOrdersService(
       await patchMetadata(orderId, { awaitingPixPayment: false });
       await scheduler.cancelByDedupe(db, `payment.pix_timeout:${orderId}`);
       if (o.workflowKind === 'CONCIERGE') {
-        await scheduler.schedule(db, { kind: 'concierge.plan', runAt: adapters.clock.now(), payload: { orderId }, dedupeKey: `concierge.plan:${orderId}` });
+        await scheduler.schedule(db, {
+          kind: 'concierge.plan',
+          runAt: adapters.clock.now(),
+          payload: { orderId },
+          dedupeKey: `concierge.plan:${orderId}`,
+        });
       } else {
         await scheduleDispatch(db, o, adapters.clock.now());
       }
@@ -823,9 +1110,21 @@ export function createOrdersService(
       const col = hours >= 24 ? bookings.reminder24hSentAt : bookings.reminder1hSentAt;
       const [b] = await db.select().from(bookings).where(eq(bookings.orderId, orderId)).limit(1);
       if (b && (hours >= 24 ? b.reminder24hSentAt : b.reminder1hSentAt)) return;
-      await db.update(bookings).set(hours >= 24 ? { reminder24hSentAt: adapters.clock.now() } : { reminder1hSentAt: adapters.clock.now() }).where(and(eq(bookings.orderId, orderId), isNull(col)));
+      await db
+        .update(bookings)
+        .set(
+          hours >= 24
+            ? { reminder24hSentAt: adapters.clock.now() }
+            : { reminder1hSentAt: adapters.clock.now() },
+        )
+        .where(and(eq(bookings.orderId, orderId), isNull(col)));
       if (o.status === 'ACCEPTED') {
-        const moved = await tryTransition(orderId, 'system.remind', { type: 'system', userId: null }, { hours });
+        const moved = await tryTransition(
+          orderId,
+          'system.remind',
+          { type: 'system', userId: null },
+          { hours },
+        );
         if (moved) return;
       }
       await notify(o);
@@ -833,9 +1132,19 @@ export function createOrdersService(
 
     async activeLiveOrderForProvider(providerId: string) {
       const [o] = await db
-        .select({ id: serviceOrders.id, lat: serviceOrders.lat, lng: serviceOrders.lng, status: serviceOrders.status })
+        .select({
+          id: serviceOrders.id,
+          lat: serviceOrders.lat,
+          lng: serviceOrders.lng,
+          status: serviceOrders.status,
+        })
         .from(serviceOrders)
-        .where(and(eq(serviceOrders.providerId, providerId), inArray(serviceOrders.status, [...LIVE_LOCATION_STATES])))
+        .where(
+          and(
+            eq(serviceOrders.providerId, providerId),
+            inArray(serviceOrders.status, [...LIVE_LOCATION_STATES]),
+          ),
+        )
         .orderBy(desc(serviceOrders.updatedAt))
         .limit(1);
       if (!o) return null;
@@ -844,12 +1153,23 @@ export function createOrdersService(
       return { id: o.id, lat: o.lat, lng: o.lng };
     },
 
-    async providersWithBookingConflict(providerIds: string[], startsAt: Date, endsAt: Date): Promise<Set<string>> {
+    async providersWithBookingConflict(
+      providerIds: string[],
+      startsAt: Date,
+      endsAt: Date,
+    ): Promise<Set<string>> {
       if (providerIds.length === 0) return new Set();
       const rows = await db
         .select({ providerId: bookings.providerId })
         .from(bookings)
-        .where(and(inArray(bookings.providerId, providerIds), isNull(bookings.releasedAt), lt(bookings.startsAt, endsAt), gt(bookings.endsAt, startsAt)));
+        .where(
+          and(
+            inArray(bookings.providerId, providerIds),
+            isNull(bookings.releasedAt),
+            lt(bookings.startsAt, endsAt),
+            gt(bookings.endsAt, startsAt),
+          ),
+        );
       return new Set(rows.map((r) => r.providerId).filter((x): x is string => Boolean(x)));
     },
 
@@ -858,7 +1178,13 @@ export function createOrdersService(
       const rows = await db
         .select({ providerId: serviceOrders.providerId })
         .from(serviceOrders)
-        .where(and(inArray(serviceOrders.providerId, providerIds), eq(serviceOrders.customerId, customerId), inArray(serviceOrders.status, ['COMPLETED', 'REVIEWED', 'CLOSED'])));
+        .where(
+          and(
+            inArray(serviceOrders.providerId, providerIds),
+            eq(serviceOrders.customerId, customerId),
+            inArray(serviceOrders.status, ['COMPLETED', 'REVIEWED', 'CLOSED']),
+          ),
+        );
       return new Set(rows.map((r) => r.providerId).filter((x): x is string => Boolean(x)));
     },
 
@@ -866,14 +1192,25 @@ export function createOrdersService(
       const rows = await db
         .select()
         .from(serviceOrders)
-        .where(and(eq(serviceOrders.customerId, userId), notInArray(serviceOrders.status, [...terminal, 'COMPLETED']), isNull(serviceOrders.parentOrderId)))
+        .where(
+          and(
+            eq(serviceOrders.customerId, userId),
+            notInArray(serviceOrders.status, [...terminal, 'COMPLETED']),
+            isNull(serviceOrders.parentOrderId),
+          ),
+        )
         .orderBy(desc(serviceOrders.createdAt))
         .limit(5);
       const now = adapters.clock.now();
       const out: Array<{ id: string; status: string; serviceName: string }> = [];
       for (const o of rows) {
         // Agendamentos futuros ainda não em execução são "próximos", não "em andamento".
-        if (o.scheduledFor && o.scheduledFor.getTime() > now.getTime() && PRE_EXECUTION_STATES.has(o.status as OrderStatus)) continue;
+        if (
+          o.scheduledFor &&
+          o.scheduledFor.getTime() > now.getTime() &&
+          PRE_EXECUTION_STATES.has(o.status as OrderStatus)
+        )
+          continue;
         const s = await deps.catalog.getServiceRow(o.serviceId);
         out.push({ id: o.id, status: o.status, serviceName: s.name });
       }
@@ -884,7 +1221,14 @@ export function createOrdersService(
       const [o] = await db
         .select()
         .from(serviceOrders)
-        .where(and(eq(serviceOrders.customerId, userId), gt(serviceOrders.scheduledFor, now), lte(serviceOrders.scheduledFor, new Date(now.getTime() + 48 * 3_600_000)), inArray(serviceOrders.status, [...PRE_EXECUTION_STATES])))
+        .where(
+          and(
+            eq(serviceOrders.customerId, userId),
+            gt(serviceOrders.scheduledFor, now),
+            lte(serviceOrders.scheduledFor, new Date(now.getTime() + 48 * 3_600_000)),
+            inArray(serviceOrders.status, [...PRE_EXECUTION_STATES]),
+          ),
+        )
         .orderBy(asc(serviceOrders.scheduledFor))
         .limit(1);
       if (!o?.scheduledFor) return null;
@@ -893,7 +1237,11 @@ export function createOrdersService(
     },
 
     async listChildren(parentOrderId: string): Promise<OrderRow[]> {
-      return db.select().from(serviceOrders).where(eq(serviceOrders.parentOrderId, parentOrderId)).orderBy(asc(serviceOrders.createdAt));
+      return db
+        .select()
+        .from(serviceOrders)
+        .where(eq(serviceOrders.parentOrderId, parentOrderId))
+        .orderBy(asc(serviceOrders.createdAt));
     },
 
     childrenAllDone(children: OrderRow[]): boolean {
@@ -903,14 +1251,23 @@ export function createOrdersService(
     async orderParticipants(orderId: string) {
       const o = await findById(orderId);
       if (!o) return null;
-      return { customerUserId: o.customerId, providerUserId: o.providerId ? await deps.providers.userIdOf(o.providerId) : null };
+      return {
+        customerUserId: o.customerId,
+        providerUserId: o.providerId ? await deps.providers.userIdOf(o.providerId) : null,
+      };
     },
 
     async listActiveWithCoords(): Promise<OrderRow[]> {
       return db
         .select()
         .from(serviceOrders)
-        .where(and(notInArray(serviceOrders.status, terminal), ne(serviceOrders.status, 'COMPLETED'), sql`${serviceOrders.lat} is not null`))
+        .where(
+          and(
+            notInArray(serviceOrders.status, terminal),
+            ne(serviceOrders.status, 'COMPLETED'),
+            sql`${serviceOrders.lat} is not null`,
+          ),
+        )
         .orderBy(desc(serviceOrders.createdAt))
         .limit(500);
     },
@@ -919,13 +1276,22 @@ export function createOrdersService(
       const attention = q.attention
         ? or(
             inArray(serviceOrders.status, ['NO_PROVIDER_FOUND', 'NEEDS_HUMAN', 'DISPUTED']),
-            and(lt(serviceOrders.scheduledFor, now), inArray(serviceOrders.status, [...PRE_EXECUTION_STATES])),
+            and(
+              lt(serviceOrders.scheduledFor, now),
+              inArray(serviceOrders.status, [...PRE_EXECUTION_STATES]),
+            ),
           )
         : undefined;
       const rows = await db
         .select()
         .from(serviceOrders)
-        .where(and(q.status ? eq(serviceOrders.status, q.status) : undefined, attention, q.cursor ? lt(serviceOrders.id, q.cursor) : undefined))
+        .where(
+          and(
+            q.status ? eq(serviceOrders.status, q.status) : undefined,
+            attention,
+            q.cursor ? lt(serviceOrders.id, q.cursor) : undefined,
+          ),
+        )
         .orderBy(desc(serviceOrders.id))
         .limit(q.limit + 1);
       const p = page(rows, q.limit);
@@ -934,11 +1300,22 @@ export function createOrdersService(
 
     /** Ordens cujo estado atual excedeu `slaSeconds` da definição. */
     async slaBreaches(now: Date) {
-      const rows = await db.select().from(serviceOrders).where(notInArray(serviceOrders.status, terminal)).limit(2000);
-      const byStatus: Record<string, { breached: number; total: number; slaSeconds: number | null; orderIds: string[] }> = {};
+      const rows = await db
+        .select()
+        .from(serviceOrders)
+        .where(notInArray(serviceOrders.status, terminal))
+        .limit(2000);
+      const byStatus: Record<
+        string,
+        { breached: number; total: number; slaSeconds: number | null; orderIds: string[] }
+      > = {};
       for (const o of rows) {
         const sla = stateMeta(workflowOf(o), o.status as OrderStatus).slaSeconds ?? null;
-        const entry = (byStatus[o.status] ??= { breached: 0, total: 0, slaSeconds: sla, orderIds: [] });
+        let entry = byStatus[o.status];
+        if (!entry) {
+          entry = { breached: 0, total: 0, slaSeconds: sla, orderIds: [] };
+          byStatus[o.status] = entry;
+        }
         entry.total++;
         if (sla !== null && now.getTime() - o.updatedAt.getTime() > sla * 1000) {
           entry.breached++;
@@ -950,7 +1327,16 @@ export function createOrdersService(
 
     registerRealtime() {
       outbox.on('order.transitioned', async (ev) => {
-        const p = ev.payload as { orderId: string; to: OrderStatus; eventId: string; seq: number; action: string; customerId: string; providerId: string | null; updatedAt: string };
+        const p = ev.payload as {
+          orderId: string;
+          to: OrderStatus;
+          eventId: string;
+          seq: number;
+          action: string;
+          customerId: string;
+          providerId: string | null;
+          updatedAt: string;
+        };
         const io = ctx.io;
         if (!io) return;
         const updated = { orderId: p.orderId, status: p.to, updatedAt: p.updatedAt };
@@ -963,7 +1349,11 @@ export function createOrdersService(
       });
       outbox.on('order.created', async (ev) => {
         const p = ev.payload as { orderId: string; customerId: string; status: OrderStatus };
-        ctx.io?.to(rooms.user(p.customerId)).emit('order.updated', { orderId: p.orderId, status: p.status, updatedAt: ev.createdAt.toISOString() });
+        ctx.io?.to(rooms.user(p.customerId)).emit('order.updated', {
+          orderId: p.orderId,
+          status: p.status,
+          updatedAt: ev.createdAt.toISOString(),
+        });
       });
     },
 

@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
@@ -17,8 +19,25 @@ export interface DbHandle {
   close: () => Promise<void>;
 }
 
-const here = new URL('.', import.meta.url);
-const migrationsFolder = new URL('../../drizzle', here).pathname;
+/**
+ * Pasta de migrações. Funciona em três contextos: fonte (`src/db/`), bundle (`dist/`) e
+ * container (cwd = apps/api). `MIGRATIONS_DIR` tem prioridade quando definido.
+ */
+function resolveMigrationsFolder(): string {
+  const here = new URL('.', import.meta.url).pathname;
+  const candidates = [
+    process.env.MIGRATIONS_DIR,
+    resolve(here, '../../drizzle'),
+    resolve(here, '../drizzle'),
+    resolve(process.cwd(), 'drizzle'),
+    resolve(process.cwd(), 'apps/api/drizzle'),
+  ].filter((c): c is string => Boolean(c));
+  for (const c of candidates) if (existsSync(join(c, 'meta', '_journal.json'))) return c;
+  throw new Error(
+    `Pasta de migrações não encontrada. Tentativas: ${candidates.join(', ')}. Defina MIGRATIONS_DIR.`,
+  );
+}
+const migrationsFolder = resolveMigrationsFolder();
 
 /**
  * DATABASE_URL definido → Postgres real. Ausente → PGlite (memória, ou arquivo se PGLITE_DATA_DIR).

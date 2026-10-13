@@ -5,7 +5,11 @@ import type { CommunicationService } from '../communication/service';
 import { registerQuotesRoutes } from './routes';
 import { createQuotesService, type QuotesService } from './service';
 
-export function registerQuotesModule(app: FastifyInstance, ctx: AppContext, deps: { communication: CommunicationService; platform: PlatformService }): QuotesService {
+export function registerQuotesModule(
+  app: FastifyInstance,
+  ctx: AppContext,
+  deps: { communication: CommunicationService; platform: PlatformService },
+): QuotesService {
   const svc = createQuotesService(ctx, deps);
   registerQuotesRoutes(app, svc);
   svc.registerRealtime();

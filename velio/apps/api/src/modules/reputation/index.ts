@@ -4,7 +4,11 @@ import type { ProvidersService } from '../providers/service';
 import { registerReputationRoutes } from './routes';
 import { createReputationService, type ReputationService } from './service';
 
-export function registerReputationModule(app: FastifyInstance, ctx: AppContext, deps: { providers: ProvidersService }): ReputationService {
+export function registerReputationModule(
+  app: FastifyInstance,
+  ctx: AppContext,
+  deps: { providers: ProvidersService },
+): ReputationService {
   const svc = createReputationService(ctx, deps);
   registerReputationRoutes(app, svc);
   return svc;

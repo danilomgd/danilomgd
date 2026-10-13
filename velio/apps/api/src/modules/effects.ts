@@ -54,15 +54,36 @@ const ANALYTICS_BY_ACTION: Partial<Record<string, AnalyticsEventName>> = {
 export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
   const providerOf = (c: EffectContext) => c.order.providerId ?? c.previous.providerId;
 
-  const notifyCustomer = (kind: Parameters<CommunicationService['notifyUser']>[1]) => async (c: EffectContext) => {
-    await d.communication.notifyUser(c.order.customerId, kind, { orderId: c.order.id, status: c.order.status });
-  };
-  const notifyProvider = (kind: Parameters<CommunicationService['notifyProvider']>[1], override?: { title: string; body: string }) => async (c: EffectContext) => {
-    const pid = providerOf(c);
-    if (pid) await d.communication.notifyProvider(pid, kind, { orderId: c.order.id, status: c.order.status }, override);
-  };
+  const notifyCustomer =
+    (kind: Parameters<CommunicationService['notifyUser']>[1]) => async (c: EffectContext) => {
+      await d.communication.notifyUser(c.order.customerId, kind, {
+        orderId: c.order.id,
+        status: c.order.status,
+      });
+    };
+  const notifyProvider =
+    (
+      kind: Parameters<CommunicationService['notifyProvider']>[1],
+      override?: { title: string; body: string },
+    ) =>
+    async (c: EffectContext) => {
+      const pid = providerOf(c);
+      if (pid)
+        await d.communication.notifyProvider(
+          pid,
+          kind,
+          { orderId: c.order.id, status: c.order.status },
+          override,
+        );
+    };
   const alert = (kind: string, title: string, severity: 'MEDIUM' | 'HIGH') => async (c: EffectContext) => {
-    await d.support.createIncident({ orderId: c.order.id, kind, title, severity, details: { action: c.action, status: c.order.status, payload: c.payload } });
+    await d.support.createIncident({
+      orderId: c.order.id,
+      kind,
+      title,
+      severity,
+      details: { action: c.action, status: c.order.status, payload: c.payload },
+    });
   };
 
   const effects: EffectExecutor = {
@@ -78,7 +99,12 @@ export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
     'payments.refund': async (c) => {
       const amount = typeof c.payload.refundCents === 'number' ? c.payload.refundCents : null;
       if (amount === 0) return;
-      await d.payments.refund(c.order, amount, String(c.payload.reason ?? c.payload.note ?? c.action), c.actor.userId);
+      await d.payments.refund(
+        c.order,
+        amount,
+        String(c.payload.reason ?? c.payload.note ?? c.action),
+        c.actor.userId,
+      );
     },
     'payments.chargeCancellationFee': async (c) => d.payments.chargeCancellationFee(c),
 
@@ -88,9 +114,13 @@ export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
         const pid = providerOf(c);
         const held = m.disputeHeldCents ?? 0;
         if (pid && held > 0) {
-          const finalPayout = typeof c.payload.providerPayoutCents === 'number' ? c.payload.providerPayoutCents : held;
+          const finalPayout =
+            typeof c.payload.providerPayoutCents === 'number' ? c.payload.providerPayoutCents : held;
           await d.wallet.releaseHold(c.order.id, pid, held, finalPayout);
-          await d.orders.setFinancials(c.order.id, { platformFeeCents: c.order.platformFeeCents ?? 0, providerPayoutCents: finalPayout });
+          await d.orders.setFinancials(c.order.id, {
+            platformFeeCents: c.order.platformFeeCents ?? 0,
+            providerPayoutCents: finalPayout,
+          });
           await d.orders.patchMetadata(c.order.id, { disputeHeldCents: 0 });
         }
         return;
@@ -104,7 +134,11 @@ export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
         discountCents: c.order.discountCents,
         billedViaParent: m.billedViaParent === true,
       });
-      if (s) await d.orders.setFinancials(c.order.id, { platformFeeCents: s.platformFeeCents, providerPayoutCents: s.providerPayoutCents });
+      if (s)
+        await d.orders.setFinancials(c.order.id, {
+          platformFeeCents: s.platformFeeCents,
+          providerPayoutCents: s.providerPayoutCents,
+        });
     },
     'wallet.hold': async (c) => {
       const pid = providerOf(c);
@@ -126,7 +160,10 @@ export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
     'notify.customer:plan_proposed': notifyCustomer('plan_proposed'),
     'notify.customer:booking_reminder': notifyCustomer('booking_reminder'),
     'notify.provider:order_cancelled': notifyProvider('order_cancelled'),
-    'notify.provider:quote_decided': notifyProvider('generic', { title: 'Orçamento decidido', body: 'O cliente respondeu ao seu orçamento.' }),
+    'notify.provider:quote_decided': notifyProvider('generic', {
+      title: 'Orçamento decidido',
+      body: 'O cliente respondeu ao seu orçamento.',
+    }),
     'notify.provider:booking_reminder': notifyProvider('booking_reminder'),
 
     'ops.alert:no_provider': alert('NO_PROVIDER', 'Nenhum prestador encontrado', 'HIGH'),
@@ -170,11 +207,22 @@ export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
     'analytics.track': async (c) => {
       const name = ANALYTICS_BY_ACTION[c.action];
       if (!name) return;
-      await d.analytics.track(name, { userId: c.order.customerId, providerId: providerOf(c), orderId: c.order.id, properties: { action: c.action, from: c.previous.status, to: c.order.status, kind: c.order.workflowKind } });
+      await d.analytics.track(name, {
+        userId: c.order.customerId,
+        providerId: providerOf(c),
+        orderId: c.order.id,
+        properties: {
+          action: c.action,
+          from: c.previous.status,
+          to: c.order.status,
+          kind: c.order.workflowKind,
+        },
+      });
     },
   };
 
   // Garantia em tempo de execução de que toda effect da definição tem executor.
-  for (const name of Object.keys(effects) as EffectName[]) if (!effects[name]) ctx.log.warn({ name }, 'efeito sem executor');
+  for (const name of Object.keys(effects) as EffectName[])
+    if (!effects[name]) ctx.log.warn({ name }, 'efeito sem executor');
   return effects;
 }

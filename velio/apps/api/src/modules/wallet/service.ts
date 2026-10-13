@@ -3,8 +3,8 @@ import { type CommissionRule, DEFAULT_COMMISSION, pickCommissionRule, settle } f
 import { and, asc, desc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { AppContext } from '../../context';
-import { newId } from '../../db/schema/_shared';
 import { commissionRules, ledgerEntries, payouts, scheduledJobs, walletAccounts } from '../../db/schema';
+import { newId } from '../../db/schema/_shared';
 import { errors } from '../../lib/errors';
 import { type Exec, iso } from '../_shared/util';
 
@@ -65,7 +65,8 @@ export function createWalletService(ctx: AppContext) {
   ): Promise<string> {
     const credits = lines.filter((l) => l.direction === 'CREDIT').reduce((s, l) => s + l.amountCents, 0);
     const debits = lines.filter((l) => l.direction === 'DEBIT').reduce((s, l) => s + l.amountCents, 0);
-    if (credits !== debits) throw new Error(`Lançamento desbalanceado: créditos ${credits} ≠ débitos ${debits}`);
+    if (credits !== debits)
+      throw new Error(`Lançamento desbalanceado: créditos ${credits} ≠ débitos ${debits}`);
     const journalId = newId();
     for (const l of lines) {
       if (l.amountCents === 0) continue;
@@ -147,20 +148,62 @@ export function createWalletService(ctx: AppContext) {
         if (input.billedViaParent) {
           // Filha de concierge: o cliente já pagou ao pai; a plataforma repassa do que arrecadou.
           lines.push(
-            { accountId: revenue.id, direction: 'DEBIT', amountCents: s.providerPayoutCents, kind: 'provider_payout_funding', description: 'Repasse financiado pela ordem pai (concierge)' },
-            { accountId: prov.id, direction: 'CREDIT', amountCents: s.providerPayoutCents, kind: 'provider_payout', description: 'Repasse líquido do serviço' },
+            {
+              accountId: revenue.id,
+              direction: 'DEBIT',
+              amountCents: s.providerPayoutCents,
+              kind: 'provider_payout_funding',
+              description: 'Repasse financiado pela ordem pai (concierge)',
+            },
+            {
+              accountId: prov.id,
+              direction: 'CREDIT',
+              amountCents: s.providerPayoutCents,
+              kind: 'provider_payout',
+              description: 'Repasse líquido do serviço',
+            },
           );
         } else {
           lines.push(
-            { accountId: clearing.id, direction: 'DEBIT', amountCents: s.chargedCents, kind: 'order_charge', description: 'Valor cobrado do cliente' },
-            { accountId: prov.id, direction: 'CREDIT', amountCents: s.providerPayoutCents, kind: 'provider_payout', description: 'Repasse líquido do serviço' },
-            { accountId: revenue.id, direction: 'CREDIT', amountCents: s.chargedCents - s.providerPayoutCents, kind: 'platform_fee', description: `Comissão da plataforma (${rule.percentBps / 100}%)` },
+            {
+              accountId: clearing.id,
+              direction: 'DEBIT',
+              amountCents: s.chargedCents,
+              kind: 'order_charge',
+              description: 'Valor cobrado do cliente',
+            },
+            {
+              accountId: prov.id,
+              direction: 'CREDIT',
+              amountCents: s.providerPayoutCents,
+              kind: 'provider_payout',
+              description: 'Repasse líquido do serviço',
+            },
+            {
+              accountId: revenue.id,
+              direction: 'CREDIT',
+              amountCents: s.chargedCents - s.providerPayoutCents,
+              kind: 'platform_fee',
+              description: `Comissão da plataforma (${rule.percentBps / 100}%)`,
+            },
           );
         }
       } else {
         lines.push(
-          { accountId: clearing.id, direction: 'DEBIT', amountCents: s.chargedCents, kind: 'order_charge', description: 'Valor cobrado do cliente' },
-          { accountId: revenue.id, direction: 'CREDIT', amountCents: s.chargedCents, kind: 'provider_payout', description: 'Arrecadação de ordem sem prestador direto (concierge)' },
+          {
+            accountId: clearing.id,
+            direction: 'DEBIT',
+            amountCents: s.chargedCents,
+            kind: 'order_charge',
+            description: 'Valor cobrado do cliente',
+          },
+          {
+            accountId: revenue.id,
+            direction: 'CREDIT',
+            amountCents: s.chargedCents,
+            kind: 'provider_payout',
+            description: 'Arrecadação de ordem sem prestador direto (concierge)',
+          },
         );
       }
       await journal(lines, { orderId: input.orderId });
@@ -201,23 +244,62 @@ export function createWalletService(ctx: AppContext) {
         .where(eq(walletAccounts.id, prov.id));
       const journalId = newId();
       if (release > 0) {
-        await db.insert(ledgerEntries).values({ accountId: prov.id, journalId, direction: 'CREDIT', amountCents: release, kind: 'dispute_release', orderId, description: 'Repasse liberado após contestação' });
-        await db.update(walletAccounts).set({ balanceCents: sql`${walletAccounts.balanceCents} + ${release}` }).where(eq(walletAccounts.id, prov.id));
+        await db.insert(ledgerEntries).values({
+          accountId: prov.id,
+          journalId,
+          direction: 'CREDIT',
+          amountCents: release,
+          kind: 'dispute_release',
+          orderId,
+          description: 'Repasse liberado após contestação',
+        });
+        await db
+          .update(walletAccounts)
+          .set({ balanceCents: sql`${walletAccounts.balanceCents} + ${release}` })
+          .where(eq(walletAccounts.id, prov.id));
       }
       if (adjustment > 0) {
-        await db.insert(ledgerEntries).values({ accountId: revenue.id, journalId, direction: 'CREDIT', amountCents: adjustment, kind: 'dispute_adjustment', orderId, description: 'Ajuste de repasse por contestação (reembolso ao cliente)' });
-        await db.update(walletAccounts).set({ balanceCents: sql`${walletAccounts.balanceCents} + ${adjustment}` }).where(eq(walletAccounts.id, revenue.id));
+        await db.insert(ledgerEntries).values({
+          accountId: revenue.id,
+          journalId,
+          direction: 'CREDIT',
+          amountCents: adjustment,
+          kind: 'dispute_adjustment',
+          orderId,
+          description: 'Ajuste de repasse por contestação (reembolso ao cliente)',
+        });
+        await db
+          .update(walletAccounts)
+          .set({ balanceCents: sql`${walletAccounts.balanceCents} + ${adjustment}` })
+          .where(eq(walletAccounts.id, revenue.id));
       }
     },
 
-    async creditProviderFee(providerId: string, amountCents: number, orderId: string, intentId: string | null) {
+    async creditProviderFee(
+      providerId: string,
+      amountCents: number,
+      orderId: string,
+      intentId: string | null,
+    ) {
       if (amountCents <= 0) return;
       const clearing = await account('PLATFORM', PLATFORM.clearing);
       const prov = await account('PROVIDER', providerId);
       await journal(
         [
-          { accountId: clearing.id, direction: 'DEBIT', amountCents, kind: 'cancellation_fee_charge', description: 'Taxa de cancelamento cobrada do cliente' },
-          { accountId: prov.id, direction: 'CREDIT', amountCents, kind: 'cancellation_fee', description: 'Taxa de cancelamento recebida' },
+          {
+            accountId: clearing.id,
+            direction: 'DEBIT',
+            amountCents,
+            kind: 'cancellation_fee_charge',
+            description: 'Taxa de cancelamento cobrada do cliente',
+          },
+          {
+            accountId: prov.id,
+            direction: 'CREDIT',
+            amountCents,
+            kind: 'cancellation_fee',
+            description: 'Taxa de cancelamento recebida',
+          },
         ],
         { orderId, intentId },
       );
@@ -230,8 +312,20 @@ export function createWalletService(ctx: AppContext) {
       const clearing = await account('PLATFORM', PLATFORM.clearing);
       await journal(
         [
-          { accountId: user.id, direction: 'DEBIT', amountCents, kind: 'wallet_payment', description: 'Pagamento com saldo da carteira' },
-          { accountId: clearing.id, direction: 'CREDIT', amountCents, kind: 'wallet_payment', description: 'Recebimento via carteira do cliente' },
+          {
+            accountId: user.id,
+            direction: 'DEBIT',
+            amountCents,
+            kind: 'wallet_payment',
+            description: 'Pagamento com saldo da carteira',
+          },
+          {
+            accountId: clearing.id,
+            direction: 'CREDIT',
+            amountCents,
+            kind: 'wallet_payment',
+            description: 'Recebimento via carteira do cliente',
+          },
         ],
         { orderId, intentId },
       );
@@ -288,7 +382,11 @@ export function createWalletService(ctx: AppContext) {
     },
 
     async listPayouts(providerId: string) {
-      const rows = await db.select().from(payouts).where(eq(payouts.providerId, providerId)).orderBy(desc(payouts.createdAt));
+      const rows = await db
+        .select()
+        .from(payouts)
+        .where(eq(payouts.providerId, providerId))
+        .orderBy(desc(payouts.createdAt));
       return rows.map((p) => ({
         id: p.id,
         amountCents: p.amountCents,
@@ -330,8 +428,20 @@ export function createWalletService(ctx: AppContext) {
         if (!payout) continue;
         await journal(
           [
-            { accountId: acc.id, direction: 'DEBIT', amountCents: acc.balanceCents, kind: 'payout', description: 'Repasse agendado' },
-            { accountId: payable.id, direction: 'CREDIT', amountCents: acc.balanceCents, kind: 'payout', description: `Repasse a pagar ao prestador ${acc.ownerId}` },
+            {
+              accountId: acc.id,
+              direction: 'DEBIT',
+              amountCents: acc.balanceCents,
+              kind: 'payout',
+              description: 'Repasse agendado',
+            },
+            {
+              accountId: payable.id,
+              direction: 'CREDIT',
+              amountCents: acc.balanceCents,
+              kind: 'payout',
+              description: `Repasse a pagar ao prestador ${acc.ownerId}`,
+            },
           ],
           { payoutId: payout.id },
         );
@@ -361,7 +471,10 @@ export function createWalletService(ctx: AppContext) {
           return row;
         },
         remove: async (id: string) => {
-          await db.update(commissionRules).set({ activeUntil: adapters.clock.now() }).where(eq(commissionRules.id, id));
+          await db
+            .update(commissionRules)
+            .set({ activeUntil: adapters.clock.now() })
+            .where(eq(commissionRules.id, id));
         },
       },
     },

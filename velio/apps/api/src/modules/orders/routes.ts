@@ -22,7 +22,8 @@ function actorForAction(auth: AuthContext, action: string): OrderActor {
   const isOps = auth.roles.includes('operator') || auth.roles.includes('admin');
   if (action.startsWith('provider.')) {
     if (isOps) return actorFrom(auth);
-    if (!auth.roles.includes('provider') || !auth.providerId) throw errors.forbidden('Ação exclusiva do prestador');
+    if (!auth.roles.includes('provider') || !auth.providerId)
+      throw errors.forbidden('Ação exclusiva do prestador');
     return actorFrom(auth, 'provider');
   }
   if (action.startsWith('operator.') || action.startsWith('system.')) {
@@ -48,7 +49,12 @@ export function registerOrdersRoutes(app: FastifyInstance, svc: OrdersService) {
   app.get<{ Params: { id: string } }>('/v1/orders/:id', async (req) => {
     const a = requireAuth(req);
     const o = await svc.requireOrderFor(req.params.id, a);
-    const actor = o.providerId && o.providerId === a.providerId ? actorFrom(a, 'provider') : o.customerId === a.userId ? actorFrom(a, 'customer') : actorFrom(a);
+    const actor =
+      o.providerId && o.providerId === a.providerId
+        ? actorFrom(a, 'provider')
+        : o.customerId === a.userId
+          ? actorFrom(a, 'customer')
+          : actorFrom(a);
     return svc.toDetail(o, actor);
   });
 
@@ -65,7 +71,8 @@ export function registerOrdersRoutes(app: FastifyInstance, svc: OrdersService) {
     const a = requireAuth(req);
     const current = await svc.requireOrderFor(req.params.id, a);
     const b = parse(CancelInput, req.body);
-    const isProvider = current.providerId !== null && current.providerId === a.providerId && current.customerId !== a.userId;
+    const isProvider =
+      current.providerId !== null && current.providerId === a.providerId && current.customerId !== a.userId;
     const action = isProvider ? 'provider.cancel' : 'customer.cancel';
     const actor = actorForAction(a, action);
     const o = await svc.transition(req.params.id, action, actor, { reason: b.reason });
@@ -76,7 +83,10 @@ export function registerOrdersRoutes(app: FastifyInstance, svc: OrdersService) {
     const a = requireProvider(req);
     const b = parse(StartInput, req.body ?? {});
     const actor = actorFrom(a, 'provider');
-    const o = await svc.transition(req.params.id, 'provider.start', actor, { ...(b.pin ? { pin: b.pin } : {}), ...(b.location ? { location: b.location } : {}) });
+    const o = await svc.transition(req.params.id, 'provider.start', actor, {
+      ...(b.pin ? { pin: b.pin } : {}),
+      ...(b.location ? { location: b.location } : {}),
+    });
     return svc.toDetail(o, actor);
   });
 
@@ -84,14 +94,18 @@ export function registerOrdersRoutes(app: FastifyInstance, svc: OrdersService) {
     const a = requireProvider(req);
     const b = parse(CompleteInput, req.body ?? {});
     const actor = actorFrom(a, 'provider');
-    const o = await svc.transition(req.params.id, 'provider.complete', actor, { notes: b.notes ?? null, evidenceIds: b.evidenceIds });
+    const o = await svc.transition(req.params.id, 'provider.complete', actor, {
+      notes: b.notes ?? null,
+      evidenceIds: b.evidenceIds,
+    });
     return svc.toDetail(o, actor);
   });
 
   app.post<{ Params: { id: string } }>('/v1/orders/:id/evidence', async (req, reply) => {
     const a = requireAuth(req);
     const o = await svc.requireOrderFor(req.params.id, a);
-    if (o.providerId !== a.providerId && !a.roles.includes('operator') && !a.roles.includes('admin')) throw errors.forbidden('Somente o prestador atribuído envia evidências');
+    if (o.providerId !== a.providerId && !a.roles.includes('operator') && !a.roles.includes('admin'))
+      throw errors.forbidden('Somente o prestador atribuído envia evidências');
     const b = parse(EvidenceInput, req.body);
     return reply.status(201).send(await svc.addEvidence(req.params.id, a.userId, b));
   });

@@ -15,7 +15,12 @@ export function registerPaymentsModule(
     wallet: WalletService;
     communication: CommunicationService;
     platform: PlatformService;
-    canAccessOrder: (userId: string, roles: string[], providerId: string | null, orderId: string) => Promise<boolean>;
+    canAccessOrder: (
+      userId: string,
+      roles: string[],
+      providerId: string | null,
+      orderId: string,
+    ) => Promise<boolean>;
   },
 ): PaymentsService {
   const svc = createPaymentsService(ctx, deps);

@@ -14,7 +14,10 @@ export function registerSubscriptionsRoutes(app: FastifyInstance, svc: Subscript
   });
   app.post<{ Params: { id: string } }>('/v1/me/subscriptions/:id/cancel', async (req) => {
     const a = requireAuth(req);
-    const b = parse(z.object({ reason: z.string().min(2).max(300).default('Cancelado pelo cliente') }), req.body ?? {});
+    const b = parse(
+      z.object({ reason: z.string().min(2).max(300).default('Cancelado pelo cliente') }),
+      req.body ?? {},
+    );
     return svc.cancel(a.userId, req.params.id, b.reason);
   });
 }

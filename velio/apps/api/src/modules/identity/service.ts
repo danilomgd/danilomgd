@@ -79,7 +79,10 @@ export function createIdentityService(ctx: AppContext) {
         })
         .returning({ id: otpChallenges.id });
       if (!ch) throw new Error('Falha ao criar desafio OTP');
-      await adapters.sms.send(phone, `Seu código VÉLIO é ${code}. Válido por ${Math.round(cfg.OTP_TTL_SECONDS / 60)} min.`);
+      await adapters.sms.send(
+        phone,
+        `Seu código VÉLIO é ${code}. Válido por ${Math.round(cfg.OTP_TTL_SECONDS / 60)} min.`,
+      );
       log.info({ phone: maskPhone(phone), app }, 'otp solicitado');
       return {
         challengeId: ch.id,
@@ -139,7 +142,7 @@ export function createIdentityService(ctx: AppContext) {
         throw errors.unauthorized('Sessão expirada');
       }
       const u = await getUserRow(row.userId);
-      if (!u || u.status !== 'ACTIVE') throw errors.unauthorized('Sessão inválida');
+      if (u?.status !== 'ACTIVE') throw errors.unauthorized('Sessão inválida');
       const tokens = await issueTokens(u, row.deviceName ?? undefined);
       const [fresh] = await db
         .select({ id: refreshTokens.id })

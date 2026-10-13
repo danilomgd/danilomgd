@@ -93,14 +93,25 @@ export function toServiceSummary(s: ServiceRow): ServiceSummary {
 /** Fontes de contexto da home resolvidas por outros módulos (ligadas após a construção). */
 export interface HomeContextSources {
   activeOrders(userId: string): Promise<Array<{ id: string; status: string; serviceName: string }>>;
-  upcomingBooking(userId: string, now: Date): Promise<{ orderId: string; scheduledFor: Date; serviceName: string } | null>;
+  upcomingBooking(
+    userId: string,
+    now: Date,
+  ): Promise<{ orderId: string; scheduledFor: Date; serviceName: string } | null>;
   hasActiveSubscription(userId: string): Promise<boolean>;
   listPlans(): Promise<unknown[]>;
-  validateCoupon(code: string, userId: string | null, categoryId: string, now: Date): Promise<CouponSource | null>;
+  validateCoupon(
+    code: string,
+    userId: string | null,
+    categoryId: string,
+    now: Date,
+  ): Promise<CouponSource | null>;
   resolveRegion(lat: number, lng: number): Promise<{ id: string } | null>;
 }
 
-export function createCatalogService(ctx: AppContext, deps: { identity: IdentityService; assets: AssetsService }) {
+export function createCatalogService(
+  ctx: AppContext,
+  deps: { identity: IdentityService; assets: AssetsService },
+) {
   const { db, adapters } = ctx;
   let sources: HomeContextSources | null = null;
 
@@ -139,7 +150,11 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
   }
 
   /** Preço efetivo: regra da região > regra global do serviço > serviço. */
-  async function getPriceSource(serviceId: string, regionId: string | null, exec: Exec = db): Promise<PriceSource> {
+  async function getPriceSource(
+    serviceId: string,
+    regionId: string | null,
+    exec: Exec = db,
+  ): Promise<PriceSource> {
     const s = await getServiceRow(serviceId, exec);
     const rules = await exec
       .select()
@@ -148,7 +163,9 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
         and(
           eq(servicePriceRules.serviceId, serviceId),
           eq(servicePriceRules.active, true),
-          regionId ? or(eq(servicePriceRules.regionId, regionId), isNull(servicePriceRules.regionId)) : isNull(servicePriceRules.regionId),
+          regionId
+            ? or(eq(servicePriceRules.regionId, regionId), isNull(servicePriceRules.regionId))
+            : isNull(servicePriceRules.regionId),
         ),
       );
     const rule = rules.find((r) => r.regionId === regionId) ?? rules.find((r) => r.regionId === null) ?? null;
@@ -164,12 +181,20 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
     };
   }
 
-  async function estimate(input: z.infer<typeof PriceEstimateInput>, userId: string | null): Promise<PriceEstimate & { couponCode: string | null }> {
+  async function estimate(
+    input: z.infer<typeof PriceEstimateInput>,
+    userId: string | null,
+  ): Promise<PriceEstimate & { couponCode: string | null }> {
     const s = await getServiceRow(input.serviceId);
     const src = await getPriceSource(s.id, input.regionId ?? null);
     let coupon: CouponSource | null = null;
     if (input.couponCode && sources) {
-      coupon = await sources.validateCoupon(input.couponCode.toUpperCase(), userId, s.categoryId, adapters.clock.now());
+      coupon = await sources.validateCoupon(
+        input.couponCode.toUpperCase(),
+        userId,
+        s.categoryId,
+        adapters.clock.now(),
+      );
     }
     return { ...estimatePrice(src, input.options, coupon), couponCode: coupon?.code ?? null };
   }
@@ -230,14 +255,31 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
           items = sources ? await sources.listPlans() : [];
           break;
         case 'banner': {
-          const rows = await db.select().from(banners).where(eq(banners.active, true)).orderBy(asc(banners.sortOrder));
-          items = rows.map((b) => ({ id: b.id, title: b.title, subtitle: b.subtitle, imageUrl: b.imageUrl, deepLink: b.deepLink }));
+          const rows = await db
+            .select()
+            .from(banners)
+            .where(eq(banners.active, true))
+            .orderBy(asc(banners.sortOrder));
+          items = rows.map((b) => ({
+            id: b.id,
+            title: b.title,
+            subtitle: b.subtitle,
+            imageUrl: b.imageUrl,
+            deepLink: b.deepLink,
+          }));
           break;
         }
         default:
           items = [];
       }
-      sections.push({ id: h.id, kind: h.kind as HomeSection['kind'], title: h.title, subtitle: h.subtitle, items, meta: {} });
+      sections.push({
+        id: h.id,
+        kind: h.kind as HomeSection['kind'],
+        title: h.title,
+        subtitle: h.subtitle,
+        items,
+        meta: {},
+      });
     }
 
     // Dica contextual: só com fonte real, em ordem de relevância.
@@ -245,19 +287,36 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
     const firstActive = active[0];
     const firstDue = dueEquipments[0];
     if (firstActive) {
-      contextHint = { text: `Você tem um pedido em andamento: ${firstActive.serviceName}.`, source: 'active_order' };
+      contextHint = {
+        text: `Você tem um pedido em andamento: ${firstActive.serviceName}.`,
+        source: 'active_order',
+      };
     } else if (upcoming) {
-      const when = upcoming.scheduledFor.toLocaleString('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const when = upcoming.scheduledFor.toLocaleString('pt-BR', {
+        timeZone: tz,
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
       contextHint = { text: `${upcoming.serviceName} agendado para ${when}.`, source: 'upcoming_booking' };
     } else if (firstDue) {
-      const months = Math.max(1, Math.round(firstDue.due.overdueDays / 30) + firstDue.row.maintenanceIntervalMonths);
+      const months = Math.max(
+        1,
+        Math.round(firstDue.due.overdueDays / 30) + firstDue.row.maintenanceIntervalMonths,
+      );
       contextHint = {
         text: `Seu ar-condicionado (${firstDue.row.room}) está há ${months} meses sem manutenção.`,
         source: 'equipment_due',
       };
     } else {
       contextHint = {
-        text: hour < 12 ? 'Que tal resolver algo cedo hoje?' : hour < 18 ? 'Precisa de alguém ainda hoje?' : 'Deixe agendado para amanhã cedo.',
+        text:
+          hour < 12
+            ? 'Que tal resolver algo cedo hoje?'
+            : hour < 18
+              ? 'Precisa de alguém ainda hoje?'
+              : 'Deixe agendado para amanhã cedo.',
         source: 'time_of_day',
       };
     }
@@ -278,7 +337,11 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
     };
     const [row] = input.id
       ? await db.update(serviceCategories).set(values).where(eq(serviceCategories.id, input.id)).returning()
-      : await db.insert(serviceCategories).values(values).onConflictDoUpdate({ target: serviceCategories.slug, set: values }).returning();
+      : await db
+          .insert(serviceCategories)
+          .values(values)
+          .onConflictDoUpdate({ target: serviceCategories.slug, set: values })
+          .returning();
     if (!row) throw errors.notFound('Categoria');
     return toCategoryDto(row);
   }
@@ -311,7 +374,11 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
     };
     const [row] = input.id
       ? await db.update(services).set(values).where(eq(services.id, input.id)).returning()
-      : await db.insert(services).values(values).onConflictDoUpdate({ target: services.slug, set: values }).returning();
+      : await db
+          .insert(services)
+          .values(values)
+          .onConflictDoUpdate({ target: services.slug, set: values })
+          .returning();
     if (!row) throw errors.notFound('Serviço');
     return toServiceDto(row);
   }
@@ -334,7 +401,11 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
     async listServices(filter: { category?: string } = {}): Promise<ServiceRow[]> {
       let categoryId: string | null = null;
       if (filter.category) {
-        const [c] = await db.select({ id: serviceCategories.id }).from(serviceCategories).where(eq(serviceCategories.slug, filter.category)).limit(1);
+        const [c] = await db
+          .select({ id: serviceCategories.id })
+          .from(serviceCategories)
+          .where(eq(serviceCategories.slug, filter.category))
+          .limit(1);
         if (!c) return [];
         categoryId = c.id;
       }
@@ -349,7 +420,9 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
       return db
         .select()
         .from(services)
-        .where(and(eq(services.active, true), or(ilike(services.searchText, term), ilike(services.name, term))))
+        .where(
+          and(eq(services.active, true), or(ilike(services.searchText, term), ilike(services.name, term))),
+        )
         .orderBy(asc(services.sortOrder))
         .limit(20);
     },
@@ -362,7 +435,8 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
         },
       },
       services: {
-        list: async () => (await db.select().from(services).orderBy(asc(services.sortOrder))).map(toServiceDto),
+        list: async () =>
+          (await db.select().from(services).orderBy(asc(services.sortOrder))).map(toServiceDto),
         upsert: upsertService,
         remove: async (id: string) => {
           await db.update(services).set({ active: false }).where(eq(services.id, id));
@@ -383,7 +457,11 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
             active: input.active,
           };
           const [row] = input.id
-            ? await db.update(servicePriceRules).set(values).where(eq(servicePriceRules.id, input.id)).returning()
+            ? await db
+                .update(servicePriceRules)
+                .set(values)
+                .where(eq(servicePriceRules.id, input.id))
+                .returning()
             : await db.insert(servicePriceRules).values(values).returning();
           if (!row) throw errors.notFound('Regra de preço');
           return row;
@@ -405,7 +483,11 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
             rules: input.rules,
             config: input.config,
           };
-          const [row] = await db.insert(homeSections).values(values).onConflictDoUpdate({ target: homeSections.id, set: values }).returning();
+          const [row] = await db
+            .insert(homeSections)
+            .values(values)
+            .onConflictDoUpdate({ target: homeSections.id, set: values })
+            .returning();
           return row;
         },
         remove: async (id: string) => {
@@ -414,7 +496,15 @@ export function createCatalogService(ctx: AppContext, deps: { identity: Identity
       },
       banners: {
         list: async () => db.select().from(banners).orderBy(asc(banners.sortOrder)),
-        upsert: async (input: { id?: string; title: string; subtitle?: string | null; imageUrl?: string | null; deepLink?: string | null; sortOrder?: number; active?: boolean }) => {
+        upsert: async (input: {
+          id?: string;
+          title: string;
+          subtitle?: string | null;
+          imageUrl?: string | null;
+          deepLink?: string | null;
+          sortOrder?: number;
+          active?: boolean;
+        }) => {
           const values = {
             title: input.title,
             subtitle: input.subtitle ?? null,

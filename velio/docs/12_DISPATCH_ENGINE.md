@@ -1,111 +1,88 @@
 # 12 — Motor de Matching e Dispatch
 
-Derivado de `packages/domain/src/matching/score.ts`, `packages/domain/src/matching/waves.ts`, `packages/domain/src/matching/matching.test.ts`, `packages/domain/src/geo/distance.ts`, `packages/domain/src/policies/scheduling.ts`, `apps/api/src/db/schema/dispatch.ts`, `apps/api/src/db/seed-data.ts` e das `WorkflowDefinition` em `packages/domain/src/workflow/definitions/*`. O módulo `apps/api/src/modules/dispatch` ainda está em implementação; os passos marcados **(conforme contrato)** descrevem o comportamento esperado da orquestração a partir do domínio puro já existente e testado.
+Derivado de `packages/domain/src/matching/{score,waves}.ts` e `matching.test.ts`, `packages/domain/src/geo/distance.ts`, `packages/domain/src/policies/scheduling.ts`, `apps/api/src/modules/dispatch/{service,routes,index}.ts`, `apps/api/src/modules/providers/service.ts` (`findCandidates`, `ingestLocation`), `apps/api/src/modules/orders/service.ts` (`scheduleDispatch`, `columnPatch`, `providersWithBookingConflict`, `providersWhoServedCustomer`), `apps/api/src/modules/reputation/service.ts`, `apps/api/src/db/schema/dispatch.ts`, `apps/api/src/db/seed-data.ts` e das `WorkflowDefinition`. Cenários A (imediato, 4 prestadores, 3 ofertas) e B (agendado, matching 6 h antes) em `apps/api/test/scenarios` exercitam o fluxo.
 
 ## 1. Visão geral
 
 ```
-service_orders(REQUESTED | SCHEDULED)
-   │  job dispatch.start (now | scheduledMatchingStart)
-   ▼
-system.start_matching ──► MATCHING ──► candidatos (SQL bbox) ──► rankCandidates (domínio)
-                                                                      │
-                                       planWave(waveIndex, ranked, config, alreadyOffered)
-                                                                      │
-          ┌──────────────────────┬──────────────────────┬─────────────┴───────────┐
-          ▼                      ▼                      ▼                         ▼
-     OFFER                  NEXT_WAVE             ESCALATE_TO_OPS                FAIL
-dispatch_rounds +        wave++ (sem oferta)    system.no_provider           (escalateToOps=false)
-dispatch_offers          recalcula raio         NO_PROVIDER_FOUND           CANCELLED_BY_PLATFORM
-system.offer → OFFERED                           ops.alert:no_provider
-job dispatch.wave_timeout(T)                     fila ops → operator.assign
-          │
-   provider.accept (primeiro vence) ──► ACCEPTED / DRIVER_ASSIGNED / UNDER_REVIEW
-   demais ofertas → WITHDRAWN; onda outcome=ACCEPTED
-          │ timeout sem aceite
-   system.wave_exhausted → MATCHING, wave++ → volta a planWave
+POST /v1/requests ──► service_orders(REQUESTED|SCHEDULED) + job dispatch.start
+                       run_at = now  |  scheduledMatchingStart(scheduledFor) = max(now, scheduledFor − 6h)
+                       (PIX: só após webhook PAID → releaseForDispatch)
+   ▼ job dispatch.start
+system.start_matching ──► MATCHING (matching_started_at, dispatch_wave = 0) ──► efeito dispatch.start
+   ▼ dispatch.start(orderId)   [loop até OFFER, ESCALATE ou FAIL]
+findCandidates(bbox do raio da onda) ──► rankCandidates(weights) ──► planWave(waveIndex, ranked, waves, alreadyOffered)
+   ├─ OFFER       → dispatch_rounds(wave n+1) + dispatch_offers + push offer_received + realtime offer.created
+   │                job dispatch.wave_timeout(expiresAt) ; system.offer → OFFERED ; dispatch_wave = n+1
+   ├─ NEXT_WAVE   → dispatch_rounds(outcome EMPTY) ; waveIndex++ ; repete imediatamente
+   ├─ ESCALATE    → system.no_provider → NO_PROVIDER_FOUND ; incidents(NO_PROVIDER, HIGH) ; fila ops
+   └─ FAIL        → idem (escalateToOps=false: ainda cai em system.no_provider)
+   ▼ aceite (POST /v1/offers/:id/accept) — primeiro vence
+provider.accept → ACCEPTED | DRIVER_ASSIGNED | UNDER_REVIEW ; demais ofertas WITHDRAWN ; rodada CLOSED/ACCEPTED
+   ▼ timeout (job dispatch.wave_timeout) ou todas rejeitadas (reject antecipa)
+ofertas PENDING → EXPIRED ; rodada EXPIRED ; system.wave_exhausted → MATCHING ; dispatch.start de novo
 ```
 
-Princípios (ADR-006): nenhum prestador fixo; a plataforma escolhe por score; toda decisão fica registrada (`dispatch_rounds`, `dispatch_offers.score_breakdown`); pesos e ondas são dados (`matching_configs`), nunca código; humano é fallback explícito (`NO_PROVIDER_FOUND`).
+Princípios (ADR-006): sem prestador fixo; score configurável por categoria (`matching_configs`); toda decisão auditada (`dispatch_rounds.snapshot`, `dispatch_offers.score_breakdown`); humano como fallback explícito.
 
 ## 2. Entrada do matching
 
-### 2.1 `MatchRequest`
+### 2.1 `MatchRequest` (`dispatch/service.ts: rankForOrder`)
 
-| Campo | Origem | Observação |
+| Campo | Origem |
+|---|---|
+| `location` | `service_orders.lat/lng` (ordem sem coordenadas → zero candidatos) |
+| `scheduledFor` | `service_orders.scheduled_for`; `null` = imediato |
+| `now` | `adapters.clock.now()` |
+| `radiusKm` | `waves.waves[waveIndex].radiusKm` (ou o da última onda se o índice passar) |
+
+### 2.2 `MatchCandidate` (`providers/service.ts: findCandidates`)
+
+| Campo | Derivação implementada | Observação |
 |---|---|---|
-| `location` | `service_orders.lat/lng` | Para `LOGISTICS`/`LAUNDRY` é o ponto de coleta |
-| `scheduledFor` | `service_orders.scheduled_for` | `null` = imediato; muda elegibilidade de `BUSY` e a `availability` |
-| `now` | `adapters.clock.now()` | `FakeClock` nos testes |
-| `radiusKm` | `waveRadius(waveIndex, config)` | Raio da onda corrente; normaliza `proximity` |
+| Pré-filtro SQL | `providers INNER JOIN provider_skills ON category_id = :categoryId WHERE status = 'APPROVED' AND availability IN ('ONLINE','BUSY') AND last_lat BETWEEN bbox AND last_lng BETWEEN bbox` | `boundingBox(center, radiusKm)` do domínio. Só `last_*` (inicializado com a base no onboarding); não há exigência de ping recente |
+| Exclusões | `metadata.excludedProviderIds` (quem cancelou após aceitar) e linhas sem `last_*` | `alreadyOffered` é aplicado depois, em `planWave` |
+| `location` | `last_lat/last_lng` | |
+| `availability`, `serviceRadiusKm` | colunas | |
+| `qualification` | `provider_skills.level` (0,5 declarado; admin eleva a 0,8/1,0 **manualmente**, sem rota dedicada ainda) | |
+| `ratingAvg`, `ratingCount`, `acceptanceRate`, `cancellationRate`, `avgResponseSeconds` | colunas de `providers`, mantidas por `reputation.recompute` | `acceptanceRate = offers_accepted / offers_received`; `cancellationRate = cancelled / max(offers_accepted, completed + cancelled)` |
+| `hasScheduleConflict` | Só para agendados: `bookings` ativos (`released_at IS NULL`) sobrepondo `[scheduledFor, scheduledFor + estimatedDuration]` | `provider_schedules` e `provider_time_off` **não** entram ainda (previsto) |
+| `servedCustomerBefore` | Existe `service_orders(provider_id, customer_id)` em `COMPLETED/REVIEWED/CLOSED` | Sem filtro por nota ≥ 4 (previsto) |
+| `minutesSinceLastOrder` | `now − providers.last_order_completed_at` | `null` para novato |
 
-### 2.2 `MatchCandidate` (montado pela API a partir de `providers`, `provider_skills`, `provider_stats`, `bookings`, `reviews`)
+## 3. Elegibilidade (`scoreCandidate`)
 
-| Campo | Fonte | Regra de derivação (conforme contrato) |
+Avaliada nesta ordem; a primeira falha define `ineligibleReason` (gravado no `snapshot` da rodada):
+
+| # | Condição | Motivo |
 |---|---|---|
-| `providerId` | `providers.id` | |
-| `location` | `providers.last_lat/last_lng` se `last_location_at > now − 15 min`, senão `base_lat/base_lng` | Prestador sem posição recente e sem base é descartado antes do score |
-| `availability` | `providers.availability` | Só `status = APPROVED` chegam ao candidato |
-| `serviceRadiusKm` | `providers.service_radius_km` | |
-| `qualification` | `provider_skills.level` para `service_orders.category_id` (0 se não houver linha) | 0,5 declarado; 0,8 verificado; 1,0 certificado |
-| `ratingAvg`, `ratingCount` | `providers.rating_avg`, `rating_count` | Média ponderada por recência (`recencyWeightedRating`) |
-| `acceptanceRate` | `provider_stats.offers_accepted / offers_received` | `null` sem histórico |
-| `cancellationRate` | `provider_stats.cancelled_count / (completed + cancelled)` | `null` sem histórico |
-| `avgResponseSeconds` | `provider_stats.avg_response_seconds` | Média de `dispatch_offers.responded_at − offered_at` |
-| `hasScheduleConflict` | `bookings` do prestador sobrepondo `[scheduledFor, scheduledFor + duração]` OU fora de `provider_schedules` OU dentro de `provider_time_off` | Para imediato: ordem ativa em estado `providerBusy` ou booking nas próximas 2 h |
-| `servedCustomerBefore` | existe `service_orders(provider_id, customer_id, status ∈ COMPLETED/REVIEWED/CLOSED)` com `reviews.rating ≥ 4` | Favorece recorrência com quem já agradou |
-| `minutesSinceLastOrder` | `now − providers.last_order_completed_at` | `null` para prestador novo |
+| 1 | `availability ∈ {OFFLINE, UNAVAILABLE}` | "Prestador indisponível" (na prática não chegam ao candidato: o SQL já filtra) |
+| 2 | imediato e `BUSY` | "Prestador ocupado" (`BUSY` é elegível para agendado) |
+| 3 | `distanceKm > min(radiusKm, serviceRadiusKm)` | "Fora do raio" |
+| 4 | `hasScheduleConflict` | "Conflito de agenda" |
+| 5 | `qualification ≤ 0` | "Sem qualificação para a categoria" |
 
-### 2.3 Pré-filtro SQL (sem PostGIS, ADR-004)
-
-```sql
--- boundingBox(center, radiusKm) do domínio: dLat = r/110.574; dLng = r/(111.32·cos(lat))
-SELECT p.*, s.level, st.*
-FROM providers p
-JOIN provider_skills s ON s.provider_id = p.id AND s.category_id = :categoryId
-LEFT JOIN provider_stats st ON st.provider_id = p.id
-WHERE p.status = 'APPROVED'
-  AND p.availability IN ('ONLINE', 'BUSY')
-  AND COALESCE(p.last_lat, p.base_lat) BETWEEN :minLat AND :maxLat
-  AND COALESCE(p.last_lng, p.base_lng) BETWEEN :minLng AND :maxLng
-  AND p.id NOT IN (SELECT provider_id FROM dispatch_offers WHERE order_id = :orderId);  -- alreadyOffered
-```
-
-Índices usados: `providers_availability_idx (availability, status)`, `providers_location_idx (last_lat, last_lng)`, `provider_skills_category_idx`. A caixa é maior que o círculo; `scoreCandidate` descarta quem ficou fora do raio real (Haversine).
-
-## 3. Elegibilidade
-
-`scoreCandidate` avalia as condições nesta ordem e para na primeira falha (`ineligibleReason` em pt-BR, gravado em `dispatch_rounds.snapshot` para auditoria):
-
-| Ordem | Condição | Motivo | Observação |
-|---|---|---|---|
-| 1 | `availability ∈ {OFFLINE, UNAVAILABLE}` | "Prestador indisponível" | |
-| 2 | imediato e `availability = BUSY` | "Prestador ocupado" | `BUSY` **é elegível para agendado** (vai terminar antes) |
-| 3 | `distanceKm > min(req.radiusKm, c.serviceRadiusKm)` | "Fora do raio" | O menor entre o raio da onda e o raio que o prestador aceita |
-| 4 | `hasScheduleConflict` | "Conflito de agenda" | |
-| 5 | `qualification ≤ 0` | "Sem qualificação para a categoria" | |
-
-Inelegíveis **ainda recebem score** (para o painel de candidatos de ops) mas `rankCandidates` os ordena depois de todos os elegíveis: `Number(b.eligible) − Number(a.eligible) || b.score − a.score || a.distanceKm − b.distanceKm`.
+Inelegíveis recebem score mesmo assim e vão para o fim do ranking: `Number(b.eligible) − Number(a.eligible) || b.score − a.score || a.distanceKm − b.distanceKm`.
 
 ## 4. `ProviderMatchScore`
 
-### 4.1 Componentes (todos em 0..1 após `clamp01`)
+### 4.1 Componentes (0..1 via `clamp01`)
 
-| Componente | Fórmula exata (`score.ts`) | Faixa e leitura |
+| Componente | Fórmula (`score.ts`) | Leitura |
 |---|---|---|
-| `proximity` | `clamp01(1 − distanceKm / max(radiusKm, 0.1))` | 1 no ponto; 0 na borda do raio da onda. Como o raio cresce por onda, o mesmo prestador ganha proximidade relativa na onda seguinte |
-| `qualification` | `clamp01(c.qualification)` | `provider_skills.level` |
-| `reputation` | `clamp01((bayesianRating(avg, count) − 3) / 2)` | 3,0 → 0; 4,0 → 0,5; 5,0 → 1. Notas abaixo de 3 zeram |
-| `availability` | `ONLINE → 1`; `BUSY e agendado → 0.6`; caso contrário `0` | Para imediato, `BUSY` já foi reprovado na elegibilidade |
-| `compatibility` | `clamp01( (servedCustomerBefore ? 0.5 : 0.2) + (minutesSinceLastOrder === null ? 0.2 : clamp01(min/240)·0.3) + (avgResponseSeconds === null ? 0.1 : clamp01(1 − s/120)·0.3) )` | Três parcelas: histórico com o cliente (0,2/0,5), tempo ocioso (0..0,3; satura em 4 h — distribui demanda), rapidez de resposta (0..0,3; zero a partir de 120 s). Máximo 1,1 antes do clamp |
-| `acceptanceRate` | `acceptanceRate === null ? 0.7 : clamp01(acceptanceRate)` | Novato recebe 0,7 (benefício da dúvida) |
-| `cancellationPenalty` | `cancellationRate === null ? 0.9 : clamp01(1 − cancellationRate·4)` | 0 % → 1; 10 % → 0,6; ≥ 25 % → 0. Novato 0,9 |
+| `proximity` | `1 − distanceKm / max(radiusKm, 0.1)` | 1 no ponto, 0 na borda do raio da onda; o mesmo prestador ganha proximidade relativa em ondas maiores |
+| `qualification` | `c.qualification` | `provider_skills.level` |
+| `reputation` | `(bayesianRating(avg, count) − 3) / 2` | 3,0 → 0; 4,0 → 0,5; 5,0 → 1 |
+| `availability` | `ONLINE → 1`; `BUSY` e agendado → `0.6`; senão `0` | |
+| `compatibility` | `(servedCustomerBefore ? 0.5 : 0.2) + (minutesSinceLastOrder null ? 0.2 : clamp01(min/240)·0.3) + (avgResponseSeconds null ? 0.1 : clamp01(1 − s/120)·0.3)` | Histórico com o cliente; ociosidade (satura em 4 h, distribui demanda); rapidez (0 a partir de 120 s) |
+| `acceptanceRate` | `null → 0.7`, senão o valor | Novato com benefício da dúvida |
+| `cancellationPenalty` | `null → 0.9`, senão `1 − 4·cancellationRate` | 10 % → 0,6; ≥ 25 % → 0 |
 
 ### 4.2 Média bayesiana
 
-`bayesianRating(avg, count, prior = 4.2, priorWeight = 5) = (avg·count + 4.2·5) / (count + 5)`; `null`/0 avaliações → 4,2.
+`bayesianRating(avg, count, prior = 4.2, priorWeight = 5) = (avg·count + 4.2·5) / (count + 5)`; sem avaliações → 4,2.
 
-| avg | count | resultado | reputation |
+| avg | count | bayes | reputation |
 |---|---|---|---|
 | — | 0 | 4,200 | 0,600 |
 | 5,0 | 1 | 4,333 | 0,667 |
@@ -115,253 +92,249 @@ Inelegíveis **ainda recebem score** (para o painel de candidatos de ops) mas `r
 | 4,8 | 120 | 4,776 | 0,888 |
 | 5,0 | 200 | 4,980 | 0,990 |
 
-Efeito: um prestador com uma única nota 5 não supera um veterano 4,8; um veterano 4,1 (60 avaliações) fica em 4,108 e perde reputação para o novato sem notas (4,2). Teste: `bayesianRating(5,1) < 4.5`, `bayesianRating(5,200) > 4.95`, `bayesianRating(null,0) = 4.2`.
+Testes: `bayesianRating(5,1) < 4.5`; `bayesianRating(5,200) > 4.95`; `bayesianRating(null,0) = 4.2`. `ratingAvg` do prestador é a média ponderada por recência (`recencyWeightedRating`: 50 mais recentes pesam 70 %).
 
-### 4.3 Agregação
+### 4.3 Agregação e pesos padrão
 
-```
-score = Σ(componente_i × peso_i) / Σ(peso_i)        arredondado a 4 casas
-```
+`score = Σ(componente × peso) / Σ(pesos)`, 4 casas; `distanceKm` 2 casas. Normalizar pela soma permite pesos que não somam 1.
 
-Normalizar pela soma dos pesos permite ao admin salvar pesos que não somam 1 sem distorcer a escala. `distanceKm` é arredondado a 2 casas.
-
-### 4.4 Pesos padrão (`DEFAULT_WEIGHTS` = `seedMatchingWeights`)
-
-| Componente | Peso | Soma acumulada |
+| Componente | `DEFAULT_WEIGHTS` = `seedMatchingWeights` | Participação |
 |---|---|---|
-| proximity | 0,30 | 0,30 |
-| reputation | 0,20 | 0,50 |
-| qualification | 0,15 | 0,65 |
-| availability | 0,15 | 0,80 |
-| compatibility | 0,10 | 0,90 |
-| acceptanceRate | 0,10 | 1,00 |
-| cancellationPenalty | 0,10 | 1,10 |
+| proximity | 0,30 | 27 % |
+| reputation | 0,20 | 18 % |
+| qualification | 0,15 | 14 % |
+| availability | 0,15 | 14 % |
+| compatibility | 0,10 | 9 % |
+| acceptanceRate | 0,10 | 9 % |
+| cancellationPenalty | 0,10 | 9 % |
+| soma | 1,10 | |
 
-Soma 1,10 (dividida na agregação). Interpretação: distância pesa 27 %, reputação 18 %, qualificação e disponibilidade 14 % cada, os três comportamentais 9 % cada.
+### 4.4 Configuração por categoria (`matching_configs`, `configFor`)
 
-### 4.5 Configuração por categoria (`matching_configs`)
+Resolução em `dispatch/service.ts`: linha ativa com `category_id = categoria da ordem` → linha ativa com `category_id IS NULL` (seed) → `DEFAULT_WEIGHTS`/`DEFAULT_WAVES` do domínio. Lida a cada onda (sem cache), então `PUT /v1/admin/matching-configs` vale para a **próxima** onda de qualquer ordem; `DELETE` só desativa. `UpsertMatchingConfigInput` valida `MatchingWeights` (0..1 cada) e `WaveConfig` (1–6 ondas; `offerCount` 1–20; `timeoutSeconds` 15–900; `escalateToOps`; `minScore`).
 
-| Coluna | Uso |
-|---|---|
-| `category_id = NULL` | Configuração global (seed) |
-| `category_id = X` | Sobrepõe para a categoria; `matching_configs_category_uq` garante uma por categoria |
-| `weights` | `MatchingWeights` (Zod: cada um 0..1) |
-| `waves` | `WaveConfig` (1..6 ondas; `offerCount` 1..20; `timeoutSeconds` 15..900; `escalateToOps`; `minScore` 0..1, padrão 0,2) |
-| `active` | Inativa cai para a global; sem global cai para `DEFAULT_WEIGHTS`/`DEFAULT_WAVES` do domínio |
+Sugestões iniciais para calibrar com `score_breakdown` × `response`:
 
-Resolução: categoria → global → padrão de código. Toda alteração via `PUT /v1/admin/matching-configs` grava `audit_logs` e vale para a **próxima onda** de ordens em andamento (o snapshot da onda corrente registra os pesos usados).
-
-Sugestões iniciais por categoria (a calibrar com `dispatch_offers.score_breakdown` e taxa de aceite):
-
-| Categoria | Ajuste sugerido | Motivo |
+| Categoria | Ajuste | Motivo |
 |---|---|---|
-| `assistencia` (chaveiro, emergências) | proximity 0,45, availability 0,2 | Urgência; quem está perto resolve |
-| `ar-condicionado`, `eletrica`, `hidraulica` | qualification 0,25, reputation 0,25 | Técnica e confiança importam mais que 2 km |
-| `lavanderia`, `entregas` | proximity 0,35, acceptanceRate 0,15 | Alto volume, baixo ticket, margem depende de aceite rápido |
-| `automotivo` leva e traz | qualification 0,2 (exige `DRIVER_LICENSE` verificado) | Custódia de veículo |
+| `assistencia` (chaveiro, emergência) | proximity 0,45; availability 0,2; ondas 60/90/120 s | Urgência |
+| `hidraulica`, `eletrica`, `ar-condicionado` | qualification 0,25; reputation 0,25 | Técnica e confiança |
+| `lavanderia`, `entregas` | proximity 0,35; acceptanceRate 0,15 | Volume e aceite rápido |
+| `automotivo` leva e traz | qualification 0,2; exigir `DRIVER_LICENSE` para `level ≥ 0,8` | Custódia de veículo |
+| Categorias `SCHEDULED` em geral | `timeoutSeconds` 600/900/900 | Resposta pode ser lenta (02 §4.1); SLA de `MATCHING` é 6 h |
 
-## 5. Ondas (`waves.ts`)
+## 5. Ondas
 
-### 5.1 `DEFAULT_WAVES` (= `seedWaves`)
+### 5.1 `DEFAULT_WAVES` = `seedWaves`
 
-| Onda | Raio | Ofertas simultâneas | Expiração | Acumulado máximo |
-|---|---|---|---|---|
-| 0 | 5 km | 3 | 90 s | 90 s |
-| 1 | 10 km | 5 | 120 s | 210 s |
-| 2 | 20 km | 8 | 180 s | 390 s |
+| Índice (`planWave`) | `dispatch_rounds.wave` | Raio | Ofertas | Expiração | Acumulado |
+|---|---|---|---|---|---|
+| 0 | 1 | 5 km | 3 | 90 s | 90 s |
+| 1 | 2 | 10 km | 5 | 120 s | 210 s |
+| 2 | 3 | 20 km | 8 | 180 s | 390 s |
 
-`escalateToOps = true`; `minScore = 0.2`. Pior caso até `NO_PROVIDER_FOUND`: 6,5 min, dentro do SLA de 600 s de `MATCHING`/`OFFERED` no `IMMEDIATE`. Para `SCHEDULED` (SLA 6 h) e `QUOTE` (SLA 1 h) o admin deve configurar ondas com `timeoutSeconds` maiores (ex.: 600/900/900) via `matching_configs` por categoria, já que ofertas de agendado toleram resposta mais lenta (02 §4.1: 5–15 min).
+`escalateToOps = true`; `minScore = 0.2`. Pior caso até `NO_PROVIDER_FOUND`: 6,5 min, dentro do SLA de 600 s de `MATCHING`/`OFFERED` no `IMMEDIATE`. `service_orders.dispatch_wave` guarda o índice **da próxima onda** a tentar (0 antes da primeira; `n+1` após ofertar a onda `n`); `dispatch_rounds.wave` é 1-based.
 
-### 5.2 `planWave(waveIndex, ranked, config, alreadyOffered)` — quatro resultados
+### 5.2 `planWave` e o loop `start()` (`dispatch/service.ts`)
 
-| Resultado | Condição | Ação da API (conforme contrato) |
+`start(orderId)` só age se `status ∈ {MATCHING, OFFERED}`. Começa em `waveIndex = dispatch_wave` e itera até `waves.length + 1` vezes:
+
+| Resultado de `planWave` | Condição | O que `start()` faz |
 |---|---|---|
-| `OFFER { waveIndex, radiusKm, timeoutSeconds, providerIds }` | Há ≥ 1 candidato `eligible && score ≥ minScore && !alreadyOffered` | Cria `dispatch_rounds(wave, radius_km, candidates_count, eligible_count, offered_count, expires_at = now + timeout, snapshot)` e um `dispatch_offers` por `providerId` (`score`, `distance_km`, `score_breakdown`, `expires_at`); `system.offer` (`MATCHING → OFFERED`); push `offer_received` + realtime `offer.created`; agenda `dispatch.wave_timeout` (dedupe `wave:{orderId}:{wave}`); `service_orders.dispatch_wave = wave` |
-| `NEXT_WAVE { waveIndex+1, reason }` | Nenhum candidato elegível nesta onda e existe próxima | Registra `dispatch_rounds(outcome='NEXT_WAVE', offered_count=0)`; recalcula candidatos com `waveRadius(waveIndex+1)` **imediatamente** (sem esperar timeout) e chama `planWave` de novo |
-| `ESCALATE_TO_OPS { reason }` | Ondas esgotadas (ou nenhuma com candidato) e `escalateToOps = true` | `system.no_provider` (`→ NO_PROVIDER_FOUND`), efeito `ops.alert:no_provider` → `incidents(NO_PROVIDER)` + realtime `ops.order_needs_attention`; `analytics.track(no_provider_found)`; cliente vê "Nossa equipe está encontrando um profissional para você" |
-| `FAIL { reason }` | Idem com `escalateToOps = false` | `operator.cancel` pelo sistema → `CANCELLED_BY_PLATFORM`, reembolso integral, notificação com sugestão de agendar |
+| `OFFER { radiusKm, timeoutSeconds, providerIds }` | ≥ 1 candidato `eligible && score ≥ minScore && !alreadyOffered` (até `offerCount`) | `dispatch_rounds(wave = idx+1, radius_km, candidates_count = total do bbox, eligible_count, offered_count, expires_at = now + timeout, snapshot = { ranked: top 20 })`; para cada id: `dispatch_offers(score, distance_km, score_breakdown, expires_at)`, outbox `offer.created`, push `offer_received`; `reputation.recordOffers` (`offers_received++`); `dispatch_wave = idx+1`; job `dispatch.wave_timeout` (`dedupe wave_timeout:{roundId}`); se a ordem ainda está `MATCHING`, `system.offer` → `OFFERED`. **Retorna** |
+| `NEXT_WAVE { waveIndex+1 }` | Nenhum candidato aproveitável e há próxima onda | `dispatch_rounds(wave = idx+1, outcome 'EMPTY', offered_count 0, ended_at)`; `dispatch_wave = idx+1`; **continua o loop sem esperar** |
+| `ESCALATE_TO_OPS` / `FAIL` | Ondas esgotadas | `dispatch_wave = idx`; `system.no_provider` (`→ NO_PROVIDER_FOUND`, efeito `ops.alert:no_provider` → `incidents(NO_PROVIDER, HIGH)` + realtime `ops.order_needs_attention`, `no_provider_found`). Com `escalateToOps = false` o comportamento é o mesmo (não há cancelamento automático; o `FAIL` do domínio é tratado como escalonamento) |
 
-Testes que fixam o comportamento: primeira onda oferta aos 3 melhores elegíveis e exclui `OFFLINE`; `alreadyOffered` com todos → `NEXT_WAVE` 1; `planWave(3, ...)` → `ESCALATE_TO_OPS`; `escalateToOps=false` e sem ninguém → `FAIL`; `minScore = 0.99` → `NEXT_WAVE`.
+`alreadyOffered` = todos os `provider_id` em `dispatch_offers` da ordem (qualquer resposta): ninguém recebe a mesma ordem duas vezes, nem em ondas maiores; `dispatch_offers_uq (order_id, provider_id, round_id)` garante dentro da rodada. Testes do domínio fixam: 3 ofertas na onda 0 excluindo `OFFLINE`; `alreadyOffered` completo → `NEXT_WAVE 1`; `planWave(3)` → `ESCALATE_TO_OPS`; `escalateToOps=false` → `FAIL`; `minScore = 0.99` → `NEXT_WAVE`.
 
-### 5.3 Ciclo de uma onda com ofertas
+### 5.3 Timeout e rejeição (`onWaveTimeout`, `rejectOffer`, `expireOffer`)
 
-1. `dispatch.wave_timeout` dispara em `expires_at`. Se a ordem já saiu de `OFFERED` (aceite ou cancelamento), o job termina sem efeito.
-2. Ofertas `PENDING` da onda → `EXPIRED` (`responded_at = now`), realtime `offer.expired`, `analytics.track(offer_expired)`; `provider_stats.offers_received` já contou na criação, então a expiração reduz `acceptance_rate` (não-resposta = recusa leve, 02 §4.1).
-3. `dispatch_rounds.outcome = 'EXPIRED'`, `ended_at`.
-4. `system.wave_exhausted` (`OFFERED → MATCHING`), `dispatch_wave++`.
-5. `alreadyOffered` = todos os `provider_id` em `dispatch_offers` da ordem (qualquer resposta): o mesmo prestador **nunca** recebe a mesma ordem duas vezes, mesmo em raio maior (`dispatch_offers_uq` garante dentro da onda; o conjunto garante entre ondas).
-6. Volta ao passo `planWave`.
+1. `dispatch.wave_timeout` roda em `expires_at`; se a rodada já tem `ended_at`, nada.
+2. Se a ordem já tem `provider_id` ou saiu de `MATCHING/OFFERED`: rodada `outcome = ACCEPTED` (ou `CLOSED`) e pendentes → `WITHDRAWN` (realtime `offer.expired` sem push).
+3. Caso contrário: pendentes → `EXPIRED` (+ push `offer_expired` + realtime), rodada `EXPIRED`, `system.wave_exhausted` (`OFFERED → MATCHING`) e `start()` de novo (próxima onda imediata, raio maior).
+4. `POST /v1/offers/:id/reject`: oferta `REJECTED`; se não resta `PENDING` na rodada, chama `onWaveTimeout` na hora (o cliente não espera o relógio).
+5. `offer.expire` (job por oferta individual): mesmo encadeamento; hoje nenhum fluxo agenda esse job (reservado).
 
-Rejeição explícita (`POST /v1/offers/:id/reject`): marca `REJECTED`; se não restar `PENDING` na onda, a API antecipa o passo 1 (não faz o cliente esperar o relógio).
+Expiração conta como não-aceite em `acceptance_rate` (`offers_received` já foi incrementado na oferta, `offers_accepted` não) — a "recusa leve" de 02 §4.1. `WITHDRAWN` também pesa da mesma forma (não há distinção em `provider_stats`; melhoria prevista: não contar `WITHDRAWN` em `offers_received`).
 
 ### 5.4 `minScore`
 
-Corte absoluto 0,2 evita ofertar a quem só está "disponível e perto" com histórico ruim: um prestador `ONLINE` a 0 km com qualificação 0,5, 25 % de cancelamento, 30 % de aceite e nota 3,0 pontua ≈ 0,41; para cair abaixo de 0,2 é preciso combinar borda do raio com reputação e comportamento no piso. Elevar `minScore` por categoria é a alavanca para categorias de risco (acesso à residência).
+Corte absoluto 0,2. Um prestador `ONLINE` a 0 km com qualificação 0,5, 25 % de cancelamento, 30 % de aceite e nota 3,0 ainda pontua ≈ 0,41; cair abaixo de 0,2 exige combinar borda do raio com reputação e comportamento no piso. Elevar `minScore` por categoria é a alavanca para categorias com acesso à residência.
 
-## 6. Aceite concorrente
+## 6. Aceite concorrente (`acceptOffer`)
 
-Duas ofertas da mesma onda podem ser aceitas no mesmo segundo. Regra: **o primeiro commit vence; os demais recebem 409**.
-
-```sql
--- dentro da transação de POST /v1/offers/:id/accept (conforme contrato)
-UPDATE dispatch_offers SET response = 'ACCEPTED', responded_at = now()
- WHERE id = :offerId AND provider_id = :providerId AND response = 'PENDING' AND expires_at > now()
-RETURNING order_id;                                  -- 0 linhas → 409 OFFER_UNAVAILABLE
-SELECT * FROM service_orders WHERE id = :orderId FOR UPDATE;
--- applyTransition(def, snapshot, 'provider.accept', { type:'provider', providerId }) → ok ou 409 INVALID_TRANSITION
-UPDATE service_orders SET status = :to, provider_id = :providerId, accepted_at = now(), version = version + 1
- WHERE id = :orderId AND version = :version;         -- 0 linhas → 409 CONFLICT (outro aceite ganhou)
-UPDATE dispatch_offers SET response = 'WITHDRAWN', responded_at = now()
- WHERE order_id = :orderId AND response = 'PENDING';
-UPDATE dispatch_rounds SET outcome = 'ACCEPTED', ended_at = now() WHERE order_id = :orderId AND wave = :wave;
+```
+BEGIN
+  SELECT oferta           → 404 | 403 "Oferta de outro prestador"
+  response ≠ PENDING      → 409 "Oferta não está mais disponível" { response }
+  expires_at < now        → 409 "Oferta expirada"
+  ordem com provider_id ou status ∉ {MATCHING, OFFERED} → 409 "Pedido já foi aceito por outro prestador" { status }
+  UPDATE dispatch_offers SET response='ACCEPTED', responded_at=now WHERE id=? AND response='PENDING'  → 0 linhas: 409
+COMMIT
+orders.transition(orderId, 'provider.accept', { provider, providerId }, { offerId })
+  ├─ ok: columnPatch grava provider_id/accepted_at; UPDATE ... WHERE version=?  (0 linhas → 409 CONFLICT)
+  └─ INVALID_TRANSITION: oferta volta a WITHDRAWN; 409 "Pedido não pode mais ser aceito"
+reputation.recordOfferAccepted(providerId, responseSeconds)   → offers_accepted++, avg_response_seconds
 ```
 
-O segundo prestador vê no app "Esta oferta já foi aceita por outro profissional" e a oferta some da lista (`offer.expired` reaproveitado com `reason` no payload em V1). `WITHDRAWN` não conta como recusa em `provider_stats`.
+Dois aceites simultâneos: o primeiro `UPDATE ... WHERE response='PENDING'` vence; o segundo vê `response = ACCEPTED` (409) ou, se correr antes do commit do primeiro, perde no `version` da ordem (409 `CONFLICT`). Cenário A verifica: p1 aceita (200, `ACCEPTED`, `providerId = p1`, `startPin = null` para o prestador), p2 recebe 409, as 2 ofertas restantes ficam `WITHDRAWN`, p1 vira `BUSY`.
 
-Efeitos da transição `provider.accept` (da definição): `dispatch.cancelOffers`, `payments.authorize`, `provider.setBusy`, `notify.customer:provider_found`, `chat.systemMessage`, `analytics.track(provider_accepted / offer_accepted)`; no `SCHEDULED` também `booking.scheduleReminders`; no `QUOTE` **não** há `payments.authorize` (só após orçamento aprovado) nem `provider.setBusy` (análise pode ser remota).
+Efeitos de `provider.accept` por workflow: IMMEDIATE/SCHEDULED/LOGISTICS/LAUNDRY → `dispatch.cancelOffers`, `payments.authorize`, `provider.setBusy`, `notify.customer:provider_found`, `chat.systemMessage`, `analytics.track(provider_accepted)`; SCHEDULED também `booking.scheduleReminders` (upsert de `bookings` com `provider_id`); QUOTE → sem autorização nem `BUSY` (análise pode ser remota). Payload `{ offerId }` fica em `order_events`.
 
 ## 7. Fallback para operador e dispatch manual
 
-| Passo | Detalhe |
+| Passo | Implementação |
 |---|---|
-| Fila | `GET /v1/ops/orders?attention=true` lista `NO_PROVIDER_FOUND` ordenadas por `matching_started_at`; SLA do estado: 300 s (IMMEDIATE), 900 s (LOGISTICS), 3600 s (SCHEDULED/QUOTE) → `incidents(SLA_BREACH)` se estourar |
-| Candidatos | `GET /v1/ops/orders/:id/candidates`: `rankCandidates` com raio = último raio × 2, **incluindo inelegíveis** com `ineligibleReason`, telefone mascarado e última posição; o operador liga para quem está `OFFLINE` ou `BUSY` |
-| Atribuição | `POST /v1/ops/orders/:id/assign { providerId, note }` → `operator.assign` (`NO_PROVIDER_FOUND\|MATCHING\|OFFERED → ACCEPTED/DRIVER_ASSIGNED/UNDER_REVIEW`) com os mesmos efeitos do aceite; cria `dispatch_rounds(wave = −1, snapshot.manual = true)` e `dispatch_offers(response='ACCEPTED', score = 0, score_breakdown = {})` para que métricas de aceite distingam manual de automático; `audit_logs(ops.order.assign)` |
-| Alternativas | Propor novo horário ao cliente (chat da ordem, `operator` é participante) e recriar como `SCHEDULED`; ou `POST /v1/ops/orders/:id/cancel` com reembolso integral |
-| Cliente | Status `NO_PROVIDER_FOUND` tem rótulo "Buscando alternativa"; cancelamento continua gratuito (`customerCancellation` → "Sem prestador confirmado") |
-
-Enquanto a densidade de prestadores for baixa, esse caminho é parte do fluxo normal, não exceção (02 §4.10).
+| Fila | `GET /v1/ops/orders?attention=true` (`NO_PROVIDER_FOUND`, `NEEDS_HUMAN`, `DISPUTED`, agendados vencidos); SLAs de `NO_PROVIDER_FOUND`: 300 s IMMEDIATE, 900 s LOGISTICS, 3600 s SCHEDULED/QUOTE (`GET /v1/ops/slas` mede por `updated_at`) |
+| Candidatos | `GET /v1/ops/orders/:id/candidates` = `rankCandidates` com o raio da **última onda configurada** (20 km no padrão) sobre `findCandidates` (APPROVED e ONLINE/BUSY) + `displayName`, `availability`, `alreadyOffered`, `location`. Prestadores `OFFLINE` **não aparecem** (contato fora do app depende da lista `GET /v1/admin/providers`; melhoria prevista: incluir offline com motivo) |
+| Atribuição | `POST /v1/ops/orders/:id/assign { providerId, note }`: 422 se não `APPROVED`; `cancelOffers`; `operator.assign` com `payload { providerId, note }` → `ACCEPTED`/`DRIVER_ASSIGNED`/`UNDER_REVIEW` com os mesmos efeitos do aceite (inclui `payments.authorize`); `recordOffers([p])` + `recordOfferAccepted(p, 0)`; `audit_logs(ops.assign)`. Não cria `dispatch_rounds`/`dispatch_offers`; a atribuição manual é identificável por `order_events.action = 'operator.assign'` e `analytics_events(provider_matched)` (mapeamento de `operator.assign`) |
+| Conflito de agenda | Não é verificado na atribuição manual (operador decide) |
+| Alternativas | `POST /v1/ops/orders/:id/cancel` (reembolso integral) ou propor reagendamento pelo chat (operador é `sender_type = operator`) |
+| Cliente | Rótulo "Buscando alternativa"; cancelamento gratuito (`customerCancellation` → "Sem prestador confirmado") |
 
 ## 8. Agendados (`SCHEDULED`)
 
 | Regra | Implementação |
 |---|---|
-| Início do matching | `scheduledMatchingStart(scheduledFor, now)`: `scheduledFor − 6 h`, ou `now` se faltar menos de 6 h; job `dispatch.start` com `run_at` nesse instante (dedupe `dispatch.start:{orderId}`) |
-| Elegibilidade | `BUSY` elegível (`availability = 0.6`); `hasScheduleConflict` olha `bookings` + `provider_schedules` + `provider_time_off` na janela `[startsAt, startsAt + windowMinutes + estimatedDuration]` |
-| Ondas | SLA de `MATCHING`/`OFFERED` = 6 h; recomenda-se `matching_configs` com timeouts de 10–15 min por onda para agendados (configuração, não código) |
-| Aceite | Cria `bookings(order_id, provider_id, starts_at, ends_at)` e agenda `booking.reminder` em `reminderTimes` (24 h e 1 h antes, só os futuros; dedupe `reminder:{orderId}:24h|1h`) → `system.remind` (`ACCEPTED → REMINDED`, idempotente) |
-| Cancelamento pelo prestador | `provider.cancel` → `MATCHING` com `reputation.penalizeProviderCancel`, `booking.release`, `dispatch.restart`; se faltar < 6 h, o novo `dispatch.start` é imediato |
-| Visitas de assinatura | `subscription.generate_visit` cria a ordem `SCHEDULED` em `nextVisitDue` com `preferred_weekday/period`; o matching favorece `servedCustomerBefore` (mesmo técnico quando possível) |
+| Início do matching | `scheduleDispatch`: job `dispatch.start` em `scheduledMatchingStart(scheduledFor, now)` (6 h antes ou agora); cenário B verifica `run_at = startsAt − 6h` |
+| Reserva e lembretes | `ensureBookingAndReminders` **na criação** (sem prestador): `bookings(provider_id null, starts_at, ends_at = + estimatedDuration)` e jobs `booking.remind` em `reminderTimes` (24 h e 1 h, só futuros). O lembrete de 24 h pode chegar ao cliente antes de haver prestador (cenário B); `booking.scheduleReminders` no aceite faz upsert com `provider_id` e `released_at = null` |
+| `remind(hours)` | Marca `reminder_24h/1h_sent_at` uma vez; se a ordem está `ACCEPTED`, `system.remind` → `REMINDED` (efeitos notificam cliente e prestador); senão notifica só o cliente (`booking_reminder`). Idempotente |
+| Elegibilidade | `BUSY` elegível (0,6); conflito via `bookings` do prestador na janela `[scheduledFor, + estimatedDuration]` |
+| Cancelamento pelo prestador | `provider.cancel` → `MATCHING`, `provider_id = null`, `excludedProviderIds += p`, `dispatch.restart` (onda 0 de novo, sem o cancelado), `booking.release` não roda (só no cancelamento do cliente); o `bookings.provider_id` fica obsoleto até o próximo aceite (`onConflictDoUpdate` corrige) |
+| Visitas de assinatura | `subscription.generate_visit` cria a ordem 7 dias antes (`VISIT_LEAD_DAYS`), às 09:00 ou 14:00 locais (`preferredPeriod`), `windowMinutes 120`, `coveredByPlan` (sem cobrança); matching segue a regra das 6 h |
 
-## 9. Logística e lavanderia (`LOGISTICS`, `LAUNDRY`)
+## 9. Logística e lavanderia
 
 | Aspecto | Regra |
 |---|---|
-| Ponto de matching | Coleta (`service_orders.lat/lng`); o destino (`destination_lat/lng`) entra na estimativa de ETA/duração, não no raio |
-| Qualificação | Categoria `automotivo` exige `provider_skills` com `DRIVER_LICENSE` verificado para `level ≥ 0.8` (regra do admin ao aprovar) |
-| Estados após aceite | `DRIVER_ASSIGNED` (não `ACCEPTED`); SLA 1800 s para `provider.en_route` |
-| Liberação intermediária | `provider.third_party_start` executa `provider.setOnline`: o motorista volta a ser candidato enquanto a oficina/lavanderia trabalha; `provider.return_pickup` executa `provider.setBusy`. A ordem continua ativa em `THIRD_PARTY_IN_PROGRESS` sem bloquear a agenda |
-| Retorno | O mesmo prestador faz a devolução (não há novo matching para a volta no MVP); V1: `dispatch.restart` para `RETURN_PICKUP` quando o original estiver indisponível |
-| Custódia | Não altera o matching, mas `requiresCustody` exige QR em `PICKED_UP`, `RETURN_PICKUP`, `DELIVERED`; `LAUNDRY` força `flags.requiresCustody = true` |
+| Ponto de matching | Coleta (`lat/lng`); destino não entra no raio |
+| Aceite | `provider.accept` → `DRIVER_ASSIGNED`; SLA 1800 s até `provider.en_route` |
+| Liberação intermediária | `provider.third_party_start` → `provider.setOnline` (motorista volta a ser candidato enquanto o terceiro executa; cenário D confirma `ONLINE`); `provider.return_pickup` → `provider.setBusy` |
+| Retorno | Mesmo prestador; sem novo matching para a volta (previsto em V1 via `dispatch.restart` quando indisponível) |
+| Custódia | Não afeta matching; `requiresCustody = config.requiresCustody \|\| LAUNDRY \|\| (LOGISTICS com veículo)`; scans em `EN_ROUTE_PICKUP`, `THIRD_PARTY_DONE`, `RETURNING` (passos exigidos pelos guards) |
 
-## 10. Tabelas de auditoria
+## 10. Auditoria e calibração
 
-| Tabela | O que responde |
+| Tabela | Responde |
 |---|---|
-| `dispatch_rounds` | Quantas ondas a ordem precisou, raio de cada uma, funil `candidates_count → eligible_count → offered_count`, `outcome` (`ACCEPTED`, `EXPIRED`, `NEXT_WAVE`, `ESCALATED`, `CANCELLED`), duração (`ended_at − started_at`), `snapshot` com pesos/config aplicados e lista de inelegíveis com motivo |
-| `dispatch_offers` | Para cada prestador ofertado: `score`, `distance_km`, `score_breakdown` (7 componentes), `response`, tempo de resposta (`responded_at − offered_at`) |
-
-Consultas de calibração:
+| `dispatch_rounds` | Ondas por ordem (`wave` 1-based), raio, funil `candidates_count → eligible_count → offered_count`, `outcome` (`EMPTY`, `EXPIRED`, `ACCEPTED`, `CLOSED`), duração, `snapshot.ranked` (top 20 com breakdown e `ineligibleReason`) |
+| `dispatch_offers` | Score, distância, `score_breakdown` (7 componentes), `response`, tempo de resposta |
+| `order_events` | `system.offer` com `{ roundId, wave, offered }`; `system.wave_exhausted` com `{ roundId, wave }`; `system.no_provider` com `{ reason, wavesTried }`; `provider.accept` com `{ offerId }`; `operator.assign` com `{ providerId, note }` |
 
 ```sql
--- taxa de aceite por onda nos últimos 30 dias
-SELECT r.wave, count(*) ofertas,
-       sum((o.response='ACCEPTED')::int) aceitas,
+-- taxa de aceite por onda (30 dias)
+SELECT r.wave, count(*) ofertas, sum((o.response='ACCEPTED')::int) aceitas,
        round(100.0*sum((o.response='ACCEPTED')::int)/count(*),1) pct
 FROM dispatch_offers o JOIN dispatch_rounds r ON r.id = o.round_id
 WHERE o.offered_at > now() - interval '30 days' GROUP BY r.wave ORDER BY r.wave;
 
--- componente médio dos aceitos vs. expirados (qual sinal prevê aceite?)
+-- qual componente separa aceitos de expirados
 SELECT response,
        avg((score_breakdown->>'proximity')::float) prox,
        avg((score_breakdown->>'reputation')::float) rep,
        avg((score_breakdown->>'acceptanceRate')::float) acc
 FROM dispatch_offers WHERE offered_at > now() - interval '30 days' GROUP BY response;
+
+-- funil de ondas vazias por região (buracos de cobertura)
+SELECT o.region_id, count(*) FILTER (WHERE r.outcome='EMPTY') vazias, count(*) total
+FROM dispatch_rounds r JOIN service_orders o ON o.id = r.order_id
+WHERE r.started_at > now() - interval '7 days' GROUP BY o.region_id;
 ```
 
-## 11. Métricas de saúde do dispatch
+## 11. Métricas de saúde
 
-| Métrica | Definição | Alvo MVP (PRD §10) | Fonte |
+| Métrica | Definição | Alvo MVP | Fonte |
 |---|---|---|---|
-| Tempo de matching p50/p90 | `accepted_at − matching_started_at` | 3 min / 10 min | `service_orders` |
-| Taxa de aceite onda 0 | aceitas / ofertadas na `wave = 0` | > 30 % | `dispatch_offers` + `dispatch_rounds` |
-| Ondas por ordem | média de `max(wave)+1` por ordem aceita | ≤ 1,6 | `dispatch_rounds` |
-| Taxa `NO_PROVIDER_FOUND` | ordens que passaram por `NO_PROVIDER_FOUND` / ordens criadas | < 10 % | `order_events` |
-| Tempo na fila ops | `accepted_at − entrada em NO_PROVIDER_FOUND` | < 5 min (SLA 300 s) | `order_events` |
-| Tempo de resposta do prestador | `responded_at − offered_at` (p50) | < 30 s | `dispatch_offers` |
-| Cancelamento pós-aceite do prestador | `CANCELLED_BY_PROVIDER` eventos / aceites | < 5 % | `order_events` |
-| Candidatos por onda | `eligible_count` médio na `wave = 0` | ≥ 4 (densidade) | `dispatch_rounds` |
-| Dispersão de demanda | Gini de ordens por prestador ativo no mês | < 0,5 | `service_orders` |
+| Tempo de matching p50/p90 | `accepted_at − matching_started_at` | 3 / 10 min | `service_orders` |
+| Taxa de aceite onda 1 | aceitas / ofertadas em `wave = 1` | > 30 % | `dispatch_offers` + `dispatch_rounds` |
+| Ondas por ordem aceita | média de `max(wave)` | ≤ 1,6 | `dispatch_rounds` |
+| Taxa `NO_PROVIDER_FOUND` | ordens com evento `to_status = NO_PROVIDER_FOUND` / criadas | < 10 % | `order_events` |
+| Tempo na fila ops | `accepted_at − evento NO_PROVIDER_FOUND` | < 5 min | `order_events` |
+| Tempo de resposta p50 | `responded_at − offered_at` | < 30 s | `dispatch_offers` |
+| Cancelamento pós-aceite do prestador | `provider.cancel` / aceites | < 5 % | `order_events` |
+| `eligible_count` médio na onda 1 | densidade | ≥ 4 | `dispatch_rounds` |
+| Dispersão de demanda | Gini de ordens por prestador ativo | < 0,5 | `service_orders` |
 
-Alertas (06 §9): `NO_PROVIDER_FOUND` > 10 min sem atribuição; `eligible_count = 0` em todas as ondas por 3 ordens seguidas na mesma região (sinal de buraco de cobertura); job `dispatch.wave_timeout` atrasado > 30 s.
+Alertas: `NO_PROVIDER_FOUND` > 10 min sem `operator.assign`; 3 ordens seguidas com `outcome = EMPTY` em todas as ondas na mesma região; `dispatch.wave_timeout` atrasado > 30 s (15 §10).
 
 ## 12. Exemplo numérico
 
-Pedido `IMMEDIATE` (encanador) em Vila Madalena (−23,5563; −46,6889), onda 0 (raio 5 km), pesos padrão. Valores calculados com `scoreCandidate` real.
+Pedido `IMMEDIATE` em Vila Madalena (−23,5563; −46,6889), onda índice 0 (raio 5 km), pesos padrão. Valores calculados com `scoreCandidate` real.
 
 ### 12.1 Candidatos
 
-| Prestador | Posição | Dist. | Disp. | Qualif. | Nota (n) | Aceite | Cancel. | Resp. (s) | Já atendeu | Min. ocioso |
+| Prestador | Posição | Dist. | Disp. | Qualif. | Nota (n) | Aceite | Cancel. | Resp. | Já atendeu | Ocioso |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Carlos | −23,5620; −46,6950 | 0,89 km | ONLINE | 0,8 | 4,8 (120) | 0,85 | 0,02 | 25 | sim | 90 |
+| Carlos | −23,5620; −46,6950 | 0,89 km | ONLINE | 0,8 | 4,8 (120) | 0,85 | 0,02 | 25 s | sim | 90 min |
 | Joana | −23,5500; −46,6800 | 1,15 km | ONLINE | 0,5 | 5,0 (3) | — | — | — | não | — |
-| Rui | −23,5800; −46,7100 | 3,40 km | ONLINE | 1,0 | 4,1 (60) | 0,60 | 0,15 | 70 | não | 10 |
-| Marta | −23,5570; −46,6900 | 0,14 km | BUSY | 0,8 | 4,9 (200) | 0,90 | 0,01 | 20 | não | 30 |
+| Rui | −23,5800; −46,7100 | 3,40 km | ONLINE | 1,0 | 4,1 (60) | 0,60 | 0,15 | 70 s | não | 10 min |
+| Marta | −23,5570; −46,6900 | 0,14 km | BUSY | 0,8 | 4,9 (200) | 0,90 | 0,01 | 20 s | não | 30 min |
 
 ### 12.2 Componentes
 
 | Componente | Carlos | Joana | Rui | Marta |
 |---|---|---|---|---|
-| proximity = 1 − d/5 | 1 − 0,888/5 = **0,822** | 1 − 1,146/5 = **0,771** | 1 − 3,401/5 = **0,320** | 0,973 |
-| qualification | **0,800** | **0,500** | **1,000** | 0,800 |
-| bayes | (4,8·120 + 21)/125 = 4,776 | (5·3 + 21)/8 = 4,500 | (4,1·60 + 21)/65 = 4,108 | 4,883 |
-| reputation = (bayes − 3)/2 | **0,888** | **0,750** | **0,554** | 0,941 |
-| availability | **1,0** | **1,0** | **1,0** | 0 (BUSY, imediato) |
-| compatibility | 0,5 + (90/240)·0,3 + (1 − 25/120)·0,3 = 0,5 + 0,1125 + 0,2375 = **0,850** | 0,2 + 0,2 + 0,1 = **0,500** | 0,2 + (10/240)·0,3 + (1 − 70/120)·0,3 = 0,2 + 0,0125 + 0,125 = **0,338** | 0,488 |
-| acceptanceRate | **0,850** | null → **0,700** | **0,600** | 0,900 |
-| cancellationPenalty = 1 − 4·c | 1 − 0,08 = **0,920** | null → **0,900** | 1 − 0,60 = **0,400** | 0,960 |
+| proximity = 1 − d/5 | 0,822 | 0,771 | 0,320 | 0,973 |
+| qualification | 0,800 | 0,500 | 1,000 | 0,800 |
+| bayes | (4,8·120+21)/125 = 4,776 | (15+21)/8 = 4,500 | (246+21)/65 = 4,108 | 4,883 |
+| reputation | 0,888 | 0,750 | 0,554 | 0,941 |
+| availability | 1,0 | 1,0 | 1,0 | 0 (BUSY, imediato) |
+| compatibility | 0,5 + 0,1125 + 0,2375 = 0,850 | 0,2 + 0,2 + 0,1 = 0,500 | 0,2 + 0,0125 + 0,125 = 0,338 | 0,488 |
+| acceptanceRate | 0,850 | 0,700 (prior) | 0,600 | 0,900 |
+| cancellationPenalty | 0,920 | 0,900 (prior) | 0,400 | 0,960 |
 
 ### 12.3 Agregação (÷ 1,10)
 
 | Prestador | Soma ponderada | Score | Elegível |
 |---|---|---|---|
-| Carlos | 0,822·0,3 + 0,8·0,15 + 0,888·0,2 + 1·0,15 + 0,85·0,1 + 0,85·0,1 + 0,92·0,1 = 0,9563 | **0,8694** | sim |
-| Joana | 0,771·0,3 + 0,5·0,15 + 0,75·0,2 + 1·0,15 + 0,5·0,1 + 0,7·0,1 + 0,9·0,1 = 0,8162 | **0,7420** | sim |
-| Rui | 0,320·0,3 + 1·0,15 + 0,554·0,2 + 1·0,15 + 0,338·0,1 + 0,6·0,1 + 0,4·0,1 = 0,6404 | **0,5822** | sim |
-| Marta | 0,8349 | 0,7590 | **não** ("Prestador ocupado") |
+| Carlos | 0,9563 | **0,8694** | sim |
+| Joana | 0,8162 | **0,7420** | sim |
+| Rui | 0,6404 | **0,5822** | sim |
+| Marta | 0,8349 | 0,7590 | não ("Prestador ocupado") |
 
-`rankCandidates` → `[Carlos 0,8694, Joana 0,7420, Rui 0,5822, Marta 0,7590 (inelegível, por último)]`. `planWave(0)` → `OFFER { radiusKm: 5, timeoutSeconds: 90, providerIds: [Carlos, Joana, Rui] }` (3 ofertas: `offerCount` da onda 0). Marta aparece no painel de candidatos de ops com o motivo.
+`rankCandidates` → Carlos, Joana, Rui, Marta (inelegível por último). `planWave(0)` → `OFFER { radiusKm 5, timeoutSeconds 90, providerIds [Carlos, Joana, Rui] }`. `dispatch_rounds(wave 1, candidates_count 4, eligible_count 3, offered_count 3)`. Marta aparece em `snapshot.ranked` com o motivo e na tela de candidatos de ops.
 
-Leituras: a vantagem de Carlos vem de reputação consolidada e histórico com o cliente, não só da distância; Joana, novata, recebe os priors (0,7 aceite, 0,9 cancelamento, 4,2 de nota puxando sua 5,0 para 4,5) e ainda assim entra na onda; Rui é o mais qualificado, mas 15 % de cancelamento derruba `cancellationPenalty` para 0,4 e a distância de 3,4 km custa 0,68 de proximidade. Se Rui fosse avaliado na onda 1 (raio 10 km), sua `proximity` subiria para 0,660 e o score para 0,6750, sem mudar nada nele.
+Leituras: Carlos lidera por reputação consolidada e histórico com o cliente; Joana, novata, recebe os priors (0,7 / 0,9 / nota puxada de 5,0 para 4,5) e ainda entra; Rui é o mais qualificado, mas 15 % de cancelamento derruba `cancellationPenalty` a 0,4 e 3,4 km custam 0,68 de proximidade. Na onda de 10 km, a `proximity` de Rui subiria a 0,660 e o score a 0,6750.
 
-### 12.4 Repasse se Carlos aceitar e concluir (preço R$ 110,00 com cupom R$ 11,00)
+### 12.4 Repasse se Carlos concluir (preço R$ 110,00 com cupom R$ 11,00)
 
-`settle(11000, 1100, { 2000 bps, min 500 })` → bruto 11000; cobrado do cliente 9900; comissão 2200; repasse ao prestador **8800**; líquido da plataforma 1100 (o desconto de R$ 11 é custo da plataforma, não do prestador). `DispatchOffer.summary.providerPayoutCents = 8800` é o que Carlos vê antes de aceitar.
+`settle(11000, 1100, { 2000 bps, mín 500 })` → cobrado 9900; comissão 2200; repasse **8800**; líquido da plataforma 1100. A prévia na oferta mostra `providerPayoutCents = round(11000 × 0,8) = 8800` (coincide com a regra padrão; com regra de 15 % a prévia divergiria — ver §13).
 
-## 13. Antipadrões evitados
+## 13. Divergências e antipadrões
 
-| Antipadrão | Por que é ruim | O que o VÉLIO faz |
-|---|---|---|
-| Broadcast para todos os prestadores da cidade | Corrida pelo botão, prestadores longe aceitam e cancelam, clientes recebem quem não é o melhor | Ondas pequenas (3/5/8) por raio crescente e score |
-| Ofertar ao mesmo prestador em todas as ondas | Spam, dessensibiliza o prestador | `alreadyOffered` + `dispatch_offers_uq` |
-| Média aritmética de notas | Um prestador com uma nota 5 supera veteranos | Média bayesiana com prior 4,2 e peso 5 |
-| Pesos no código | Calibrar exige deploy | `matching_configs` por categoria, com padrão global e fallback de código |
-| Oferta sem relógio | Cliente em limbo | `expires_at` em toda oferta e onda; expiração conta como recusa leve |
-| Aceite sem transação | Dois prestadores "aceitam" | `UPDATE ... WHERE response='PENDING'` + lock da ordem + `version` |
-| Decisão opaca | Impossível explicar por que X não foi chamado | `score_breakdown` por oferta e `snapshot` de inelegíveis por onda |
-| Sem fallback humano | Ordem morre em cidade de baixa densidade | `NO_PROVIDER_FOUND` com fila, SLA e `operator.assign` |
-| Expor endereço na oferta | Vazamento de dado pessoal e negociação fora do app | `approxLocation` (bairro + coordenadas arredondadas); endereço só após aceite |
-| Penalizar `BUSY` em agendado | Perde os melhores prestadores para amanhã | `BUSY` elegível com `availability = 0.6` quando `scheduledFor != null` |
+| Antipadrão evitado | Como |
+|---|---|
+| Broadcast para toda a cidade | Ondas 3/5/8 por raio crescente e score |
+| Repetir prestador entre ondas | `alreadyOffered` + `dispatch_offers_uq` + `excludedProviderIds` |
+| Média aritmética de notas | Bayesiana com prior 4,2 e peso 5 |
+| Pesos no código | `matching_configs` lido a cada onda |
+| Oferta sem relógio | `expires_at` em oferta e rodada; expiração = recusa leve |
+| Aceite sem transação | `UPDATE ... WHERE response='PENDING'` + `version` da ordem |
+| Decisão opaca | `score_breakdown` + `snapshot.ranked` |
+| Sem fallback humano | `NO_PROVIDER_FOUND` + fila + `operator.assign` |
+| Endereço na oferta | `approxLocation` (bairro, 3 casas decimais) |
+
+Divergências entre implementação e intenção (a resolver):
+
+| # | Item | Hoje | Alvo |
+|---|---|---|---|
+| 1 | `providerPayoutCents` na oferta | `round(total × 0.8)` fixo | `settle(total, discount, pickRule(categoria, região))` |
+| 2 | Conflito de agenda | só `bookings` | + `provider_schedules` e `provider_time_off` |
+| 3 | `servedCustomerBefore` | qualquer ordem concluída | só com `reviews.rating ≥ 4` |
+| 4 | Candidatos de ops | só ONLINE/BUSY | incluir OFFLINE/em conflito com motivo, telefone mascarado |
+| 5 | `WITHDRAWN` em `acceptance_rate` | conta como não-aceite | excluir de `offers_received` |
+| 6 | `escalateToOps = false` | mesmo caminho de escalonamento | cancelar pela plataforma com reembolso, como o domínio sugere |
+| 7 | Frescor da posição | qualquer `last_*` | exigir `last_location_at` recente para ONLINE (ex.: 15 min) |
+| 8 | Dispatch manual | sem `dispatch_rounds`/`dispatch_offers` | registrar rodada manual para métricas |
 
 ## 14. Evolução
 
-| Fase | Capacidade | Base já existente |
+| Fase | Capacidade | Base existente |
 |---|---|---|
-| V1 | **Surge por região/hora**: `service_price_rules.surge_multiplier_bps` já é aplicado por `estimatePrice`; falta job que o ajuste a partir de `eligible_count`/demanda por região com teto público (02 §4.11) | `surge_multiplier_bps`, `dispatch_rounds.eligible_count` |
-| V1 | **Taxa de deslocamento** (piso + km acima de franquia), fora da base da comissão | `distance_km` em `dispatch_offers`; `Settlement` aceita `paymentFeeBps`, precisa de linha própria |
-| V1 | **Níveis de prestador** com prioridade na onda 0 (02 §4.12) | `provider_stats` já tem os insumos; vira componente ou bônus aditivo em `scoreCandidate` com peso configurável |
-| V1 | **PostGIS** para `ST_DWithin` e polígonos de região (07 §14.1) | Pré-filtro isolado em SQL; domínio não muda |
-| V1 | **Timeouts por workflowKind** além de por categoria (`matching_configs` ganha `workflowKind` opcional) | `WaveConfig` já parametrizado |
-| V2 | **Previsão de demanda**: histórico `analytics_events(service_request_started)` por hexágono/hora alimenta avisos de posicionamento aos prestadores ("Pinheiros terá alta demanda às 18h") e surge antecipado | `analytics_events`, `provider_locations` |
-| V2 | **Posicionamento sugerido** e modo "lista de ordens disponíveis" para prestadores nível alto | Elegibilidade e score reaproveitados; a diferença é quem inicia (pull vs push) |
-| V3 | **Aprendizado dos pesos**: regressão sobre `score_breakdown` → `response` para propor pesos por categoria; sempre revisados por humano antes de salvar em `matching_configs` | Auditoria completa por construção |
+| V1 | Surge por região/hora (`surge_multiplier_bps` já aplicado por `estimatePrice`; falta o job que o ajuste a partir de `eligible_count`) | `service_price_rules`, `dispatch_rounds` |
+| V1 | Taxa de deslocamento (piso + km) fora da comissão | `distance_km` em `dispatch_offers` |
+| V1 | Níveis de prestador com prioridade na onda 1 | `provider_stats` |
+| V1 | PostGIS (`ST_DWithin`, polígonos) | pré-filtro isolado em `findCandidates` |
+| V1 | Timeouts por `workflowKind` em `matching_configs` | `WaveConfig` parametrizado |
+| V2 | Previsão de demanda e posicionamento sugerido | `analytics_events`, `provider_locations` |
+| V3 | Aprendizado dos pesos revisado por humano | `score_breakdown` × `response` |

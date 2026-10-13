@@ -12,7 +12,14 @@ import { createOrdersService, type OrdersService } from './service';
 export function registerOrdersModule(
   app: FastifyInstance,
   ctx: AppContext,
-  deps: { catalog: CatalogService; geo: GeoService; assets: AssetsService; identity: IdentityService; providers: ProvidersService; platform: PlatformService },
+  deps: {
+    catalog: CatalogService;
+    geo: GeoService;
+    assets: AssetsService;
+    identity: IdentityService;
+    providers: ProvidersService;
+    platform: PlatformService;
+  },
 ): OrdersService {
   const svc = createOrdersService(ctx, deps);
   registerOrdersRoutes(app, svc);

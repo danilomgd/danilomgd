@@ -28,7 +28,15 @@ export function createAnalyticsService(ctx: AppContext) {
       return input.events.length;
     },
 
-    async track(name: AnalyticsEventName, ref: { userId?: string | null; providerId?: string | null; orderId?: string | null; properties?: Record<string, unknown> }) {
+    async track(
+      name: AnalyticsEventName,
+      ref: {
+        userId?: string | null;
+        providerId?: string | null;
+        orderId?: string | null;
+        properties?: Record<string, unknown>;
+      },
+    ) {
       await db.insert(analyticsEvents).values({
         name,
         userId: ref.userId ?? null,
@@ -51,17 +59,31 @@ export function createAnalyticsService(ctx: AppContext) {
           n: count(),
           gmv: sql<number>`coalesce(sum(${serviceOrders.totalCents}), 0)`,
           fee: sql<number>`coalesce(sum(${serviceOrders.platformFeeCents}), 0)`,
-          matching: sql<number | null>`avg(extract(epoch from (${serviceOrders.acceptedAt} - ${serviceOrders.matchingStartedAt})))`,
+          matching: sql<
+            number | null
+          >`avg(extract(epoch from (${serviceOrders.acceptedAt} - ${serviceOrders.matchingStartedAt})))`,
         })
         .from(serviceOrders)
         .where(and(inPeriod, inArray(serviceOrders.status, completedStatuses)));
-      const [cancelled] = await db.select({ n: count() }).from(serviceOrders).where(and(inPeriod, inArray(serviceOrders.status, cancelledStatuses)));
-      const [noProvider] = await db.select({ n: count() }).from(serviceOrders).where(and(inPeriod, eq(serviceOrders.status, 'NO_PROVIDER_FOUND')));
+      const [cancelled] = await db
+        .select({ n: count() })
+        .from(serviceOrders)
+        .where(and(inPeriod, inArray(serviceOrders.status, cancelledStatuses)));
+      const [noProvider] = await db
+        .select({ n: count() })
+        .from(serviceOrders)
+        .where(and(inPeriod, eq(serviceOrders.status, 'NO_PROVIDER_FOUND')));
       const [arrival] = await db
-        .select({ secs: sql<number | null>`avg(extract(epoch from (${orderEvents.createdAt} - ${serviceOrders.acceptedAt})))` })
+        .select({
+          secs: sql<
+            number | null
+          >`avg(extract(epoch from (${orderEvents.createdAt} - ${serviceOrders.acceptedAt})))`,
+        })
         .from(orderEvents)
         .innerJoin(serviceOrders, eq(sql`${serviceOrders.id}::text`, orderEvents.orderId))
-        .where(and(eq(orderEvents.toStatus, 'ARRIVED'), sql`${serviceOrders.acceptedAt} is not null`, inPeriod));
+        .where(
+          and(eq(orderEvents.toStatus, 'ARRIVED'), sql`${serviceOrders.acceptedAt} is not null`, inPeriod),
+        );
       const perCustomer = db
         .select({ customerId: serviceOrders.customerId, n: count().as('n') })
         .from(serviceOrders)
@@ -71,9 +93,20 @@ export function createAnalyticsService(ctx: AppContext) {
       const [repeat] = await db
         .select({ repeaters: sql<number>`count(*) filter (where ${perCustomer.n} >= 2)`, total: count() })
         .from(perCustomer);
-      const [rating] = await db.select({ avg: sql<number | null>`avg(${reviews.rating})` }).from(reviews).where(and(eq(reviews.targetType, 'PROVIDER'), gte(reviews.createdAt, from), lt(reviews.createdAt, to)));
-      const [active] = await db.select({ n: count() }).from(providers).where(and(eq(providers.status, 'APPROVED'), inArray(providers.availability, ['ONLINE', 'BUSY'])));
-      const [newCustomers] = await db.select({ n: count() }).from(users).where(and(gte(users.createdAt, from), lt(users.createdAt, to)));
+      const [rating] = await db
+        .select({ avg: sql<number | null>`avg(${reviews.rating})` })
+        .from(reviews)
+        .where(
+          and(eq(reviews.targetType, 'PROVIDER'), gte(reviews.createdAt, from), lt(reviews.createdAt, to)),
+        );
+      const [active] = await db
+        .select({ n: count() })
+        .from(providers)
+        .where(and(eq(providers.status, 'APPROVED'), inArray(providers.availability, ['ONLINE', 'BUSY'])));
+      const [newCustomers] = await db
+        .select({ n: count() })
+        .from(users)
+        .where(and(gte(users.createdAt, from), lt(users.createdAt, to)));
 
       const gmv = Number(completed?.gmv ?? 0);
       const fee = Number(completed?.fee ?? 0);
@@ -93,10 +126,18 @@ export function createAnalyticsService(ctx: AppContext) {
         takeRatePct: gmv > 0 ? Math.round((fee / gmv) * 10000) / 100 : null,
         platformRevenueCents: fee,
         repeatRatePct: total > 0 ? Math.round((repeaters / total) * 10000) / 100 : null,
-        avgMatchingSeconds: completed?.matching === null || completed?.matching === undefined ? null : Math.round(Number(completed.matching)),
-        avgArrivalSeconds: arrivalSecs === null || arrivalSecs === undefined ? null : Math.round(Number(arrivalSecs)),
-        avgRating: rating?.avg === null || rating?.avg === undefined ? null : Math.round(Number(rating.avg) * 100) / 100,
-        noProviderRatePct: ordersN > 0 ? Math.round((Number(noProvider?.n ?? 0) / ordersN) * 10000) / 100 : null,
+        avgMatchingSeconds:
+          completed?.matching === null || completed?.matching === undefined
+            ? null
+            : Math.round(Number(completed.matching)),
+        avgArrivalSeconds:
+          arrivalSecs === null || arrivalSecs === undefined ? null : Math.round(Number(arrivalSecs)),
+        avgRating:
+          rating?.avg === null || rating?.avg === undefined
+            ? null
+            : Math.round(Number(rating.avg) * 100) / 100,
+        noProviderRatePct:
+          ordersN > 0 ? Math.round((Number(noProvider?.n ?? 0) / ordersN) * 10000) / 100 : null,
         activeProviders: Number(active?.n ?? 0),
         newCustomers: Number(newCustomers?.n ?? 0),
       };

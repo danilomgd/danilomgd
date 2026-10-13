@@ -71,14 +71,21 @@ export function registerAdminRoutes(
     'home-sections': { schema: UpsertHomeSectionInput, ...deps.catalog.admin.homeSections } as Resource,
     banners: { schema: UpsertBannerInput, ...deps.catalog.admin.banners } as Resource,
     regions: { schema: UpsertRegionInput, ...deps.geo.admin } as Resource,
-    'commission-rules': { schema: UpsertCommissionRuleInput, ...deps.wallet.admin.commissionRules } as Resource,
-    'matching-configs': { schema: UpsertMatchingConfigInput, ...deps.dispatch.admin.matchingConfigs } as Resource,
+    'commission-rules': {
+      schema: UpsertCommissionRuleInput,
+      ...deps.wallet.admin.commissionRules,
+    } as Resource,
+    'matching-configs': {
+      schema: UpsertMatchingConfigInput,
+      ...deps.dispatch.admin.matchingConfigs,
+    } as Resource,
     coupons: { schema: UpsertCouponInput, ...deps.payments.admin.coupons } as Resource,
     plans: { schema: UpsertPlanInput, ...deps.subscriptions.admin.plans } as Resource,
     users: {
       schema: UpdateUserRolesInput,
       list: () => deps.identity.listUsers(),
-      upsert: ((input: z.infer<typeof UpdateUserRolesInput>) => deps.identity.setRoles(input.id, input.roles)) as Resource['upsert'],
+      upsert: ((input: z.infer<typeof UpdateUserRolesInput>) =>
+        deps.identity.setRoles(input.id, input.roles)) as Resource['upsert'],
       remove: async () => {
         throw errors.unprocessable('Usuários não são removidos; altere os papéis ou o status');
       },
@@ -110,7 +117,15 @@ export function registerAdminRoutes(
     if (!r) throw errors.notFound('Recurso');
     const input = parse(r.schema, req.body);
     const result = await r.upsert(input as never);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'admin', action: `admin.${req.params.resource}.upsert`, targetType: req.params.resource, targetId: (result as { id?: string; code?: string })?.id ?? (result as { code?: string })?.code ?? null, after: result, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'admin',
+      action: `admin.${req.params.resource}.upsert`,
+      targetType: req.params.resource,
+      targetId: (result as { id?: string; code?: string })?.id ?? (result as { code?: string })?.code ?? null,
+      after: result,
+      ip: req.ip,
+    });
     return result;
   });
 
@@ -119,7 +134,14 @@ export function registerAdminRoutes(
     const r = resources[req.params.resource];
     if (!r) throw errors.notFound('Recurso');
     await r.remove(req.params.id);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'admin', action: `admin.${req.params.resource}.delete`, targetType: req.params.resource, targetId: req.params.id, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'admin',
+      action: `admin.${req.params.resource}.delete`,
+      targetType: req.params.resource,
+      targetId: req.params.id,
+      ip: req.ip,
+    });
     return reply.status(204).send();
   });
 
@@ -128,7 +150,16 @@ export function registerAdminRoutes(
     const b = parse(ApproveProviderInput, req.body);
     const before = await deps.providers.getById(req.params.id);
     const me = await deps.providers.decide(req.params.id, b, a.userId);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'admin', action: `admin.providers.${b.decision.toLowerCase()}`, targetType: 'provider', targetId: me.id, before: { status: before.status }, after: { status: me.status, reason: b.reason ?? null }, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'admin',
+      action: `admin.providers.${b.decision.toLowerCase()}`,
+      targetType: 'provider',
+      targetId: me.id,
+      before: { status: before.status },
+      after: { status: me.status, reason: b.reason ?? null },
+      ip: req.ip,
+    });
     return me;
   });
 
@@ -142,7 +173,15 @@ export function registerAdminRoutes(
     const before = await deps.platform.getSettings();
     const input = parse(PlatformSettings, req.body);
     const after = await deps.platform.updateSettings(input, a.userId);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'admin', action: 'admin.settings.update', targetType: 'settings', before, after, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'admin',
+      action: 'admin.settings.update',
+      targetType: 'settings',
+      before,
+      after,
+      ip: req.ip,
+    });
     return after;
   });
 
@@ -158,7 +197,13 @@ export function registerAdminRoutes(
 
   app.get('/v1/admin/analytics/dashboard', async (req) => {
     requireRole(req, 'admin', 'operator');
-    const q = parse(z.object({ from: z.string().datetime({ offset: true }).optional(), to: z.string().datetime({ offset: true }).optional() }), req.query ?? {});
+    const q = parse(
+      z.object({
+        from: z.string().datetime({ offset: true }).optional(),
+        to: z.string().datetime({ offset: true }).optional(),
+      }),
+      req.query ?? {},
+    );
     const to = q.to ? new Date(q.to) : clock.now();
     const from = q.from ? new Date(q.from) : new Date(to.getTime() - 30 * 86_400_000);
     return deps.analytics.dashboard(from, to);

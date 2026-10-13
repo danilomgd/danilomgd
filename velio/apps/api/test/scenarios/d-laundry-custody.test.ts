@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PHOTO, type TestApp, createTestApp, requestAndAccept, transition } from '../harness';
+import { createTestApp, PHOTO, requestAndAccept, type TestApp, transition } from '../harness';
 
 describe('D) lavanderia com cadeia de custódia', () => {
   let t: TestApp;
@@ -13,7 +13,9 @@ describe('D) lavanderia com cadeia de custódia', () => {
   it('coleta exige scan do custodyCode; ciclo completo com 4 custody_events', async () => {
     const customer = await t.asCustomer('+5511999990004');
     const driver = await t.asProvider('+5511988880020', { categorySlugs: ['lavanderia'] });
-    const { orderId } = await requestAndAccept(t, customer, driver, 'lavanderia-coleta', { options: { sacos: 1 } });
+    const { orderId } = await requestAndAccept(t, customer, driver, 'lavanderia-coleta', {
+      options: { sacos: 1 },
+    });
     let order = await t.read.order(orderId);
     expect(order?.status).toBe('DRIVER_ASSIGNED');
     expect(order?.flags.requiresCustody).toBe(true);
@@ -33,19 +35,31 @@ describe('D) lavanderia com cadeia de custódia', () => {
     const wrong = await driver.api.post(`/v1/orders/${orderId}/custody/scan`, { itemCode: 'VL-ZZZZZZ' });
     expect(wrong.status).toBe(422);
 
-    const scan = await driver.api.post<{ status: string }>(`/v1/orders/${orderId}/custody/scan`, { itemCode: code, photoUrl: PHOTO, location: { lat: -23.56, lng: -46.68 } });
+    const scan = await driver.api.post<{ status: string }>(`/v1/orders/${orderId}/custody/scan`, {
+      itemCode: code,
+      photoUrl: PHOTO,
+      location: { lat: -23.56, lng: -46.68 },
+    });
     expect(scan.status, JSON.stringify(scan.body)).toBe(200);
     expect((await transition(driver.api, orderId, 'provider.pickup')).body.status).toBe('PICKED_UP');
     expect((await transition(driver.api, orderId, 'provider.depart')).body.status).toBe('IN_TRANSIT');
-    expect((await transition(driver.api, orderId, 'provider.arrive_destination')).body.status).toBe('AT_DESTINATION');
-    expect((await transition(driver.api, orderId, 'provider.third_party_start')).body.status).toBe('THIRD_PARTY_IN_PROGRESS');
+    expect((await transition(driver.api, orderId, 'provider.arrive_destination')).body.status).toBe(
+      'AT_DESTINATION',
+    );
+    expect((await transition(driver.api, orderId, 'provider.third_party_start')).body.status).toBe(
+      'THIRD_PARTY_IN_PROGRESS',
+    );
     expect((await t.read.provider(driver.providerId))?.availability).toBe('ONLINE'); // motorista liberado
-    expect((await transition(driver.api, orderId, 'provider.third_party_done')).body.status).toBe('THIRD_PARTY_DONE');
+    expect((await transition(driver.api, orderId, 'provider.third_party_done')).body.status).toBe(
+      'THIRD_PARTY_DONE',
+    );
 
     // Nova coleta exige scan de novo.
     expect((await transition(driver.api, orderId, 'provider.return_pickup')).status).toBe(409);
     await driver.api.post(`/v1/orders/${orderId}/custody/scan`, { itemCode: code });
-    expect((await transition(driver.api, orderId, 'provider.return_pickup')).body.status).toBe('RETURN_PICKUP');
+    expect((await transition(driver.api, orderId, 'provider.return_pickup')).body.status).toBe(
+      'RETURN_PICKUP',
+    );
     expect((await transition(driver.api, orderId, 'provider.return_depart')).body.status).toBe('RETURNING');
 
     // Entrega: scan + foto.

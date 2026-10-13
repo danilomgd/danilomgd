@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MINUTE, type TestApp, createTestApp, requestAndAccept, transition } from '../harness';
+import { createTestApp, MINUTE, requestAndAccept, type TestApp, transition } from '../harness';
 
 describe('I) cliente cancela em cada fase', () => {
   let t: TestApp;
@@ -13,9 +13,16 @@ describe('I) cliente cancela em cada fase', () => {
   it('antes do aceite: sem taxa', async () => {
     const customer = await t.asCustomer('+5511999990010');
     const service = await t.read.service('chaveiro');
-    const created = await customer.api.post<{ id: string }>('/v1/requests', { serviceId: service?.id, addressId: customer.addressId, schedule: { mode: 'NOW' }, paymentMethodId: customer.paymentMethodId });
+    const created = await customer.api.post<{ id: string }>('/v1/requests', {
+      serviceId: service?.id,
+      addressId: customer.addressId,
+      schedule: { mode: 'NOW' },
+      paymentMethodId: customer.paymentMethodId,
+    });
     await t.drain();
-    const res = await customer.api.post<{ status: string }>(`/v1/orders/${created.body.id}/cancel`, { reason: 'Resolvi sozinho' });
+    const res = await customer.api.post<{ status: string }>(`/v1/orders/${created.body.id}/cancel`, {
+      reason: 'Resolvi sozinho',
+    });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('CANCELLED_BY_CUSTOMER');
     await t.drain();
@@ -28,7 +35,9 @@ describe('I) cliente cancela em cada fase', () => {
     const provider = await t.asProvider('+5511988880061', { categorySlugs: ['hidraulica'] });
     const { orderId } = await requestAndAccept(t, customer, provider, 'encanador-visita');
     await t.advance(30 * MINUTE);
-    const res = await customer.api.post<{ status: string }>(`/v1/orders/${orderId}/cancel`, { reason: 'Mudança de planos' });
+    const res = await customer.api.post<{ status: string }>(`/v1/orders/${orderId}/cancel`, {
+      reason: 'Mudança de planos',
+    });
     expect(res.body.status).toBe('CANCELLED_BY_CUSTOMER');
     await t.drain();
     const intents = await t.read.intents(orderId);
@@ -39,7 +48,9 @@ describe('I) cliente cancela em cada fase', () => {
     expect((await t.read.order(orderId))?.cancellationFeeCents).toBe(1500);
     expect((await t.read.wallet('PROVIDER', provider.providerId))?.balanceCents).toBe(1500);
     expect((await t.read.provider(provider.providerId))?.availability).toBe('ONLINE');
-    expect((await t.read.notifications(provider.userId)).some((n) => n.kind === 'order_cancelled')).toBe(true);
+    expect((await t.read.notifications(provider.userId)).some((n) => n.kind === 'order_cancelled')).toBe(
+      true,
+    );
     const risk = await t.db.select().from(t.schema.customerRiskSignals);
     expect(risk.find((r) => r.userId === customer.userId)?.lateCancellations90d).toBe(1);
   });
@@ -49,7 +60,9 @@ describe('I) cliente cancela em cada fase', () => {
     const provider = await t.asProvider('+5511988880062', { categorySlugs: ['hidraulica'] });
     const { orderId } = await requestAndAccept(t, customer, provider, 'encanador-visita');
     await t.advance(5 * MINUTE);
-    const res = await customer.api.post<{ status: string }>(`/v1/orders/${orderId}/cancel`, { reason: 'Engano' });
+    const res = await customer.api.post<{ status: string }>(`/v1/orders/${orderId}/cancel`, {
+      reason: 'Engano',
+    });
     expect(res.body.status).toBe('CANCELLED_BY_CUSTOMER');
     await t.drain();
     expect((await t.read.intents(orderId)).some((i) => i.kind === 'CANCELLATION_FEE')).toBe(false);
@@ -60,7 +73,9 @@ describe('I) cliente cancela em cada fase', () => {
     const provider = await t.asProvider('+5511988880063', { categorySlugs: ['hidraulica'] });
     const { orderId } = await requestAndAccept(t, customer, provider, 'encanador-visita');
     expect((await transition(provider.api, orderId, 'provider.en_route')).body.status).toBe('EN_ROUTE');
-    const res = await customer.api.post<{ status: string }>(`/v1/orders/${orderId}/cancel`, { reason: 'Não posso mais receber' });
+    const res = await customer.api.post<{ status: string }>(`/v1/orders/${orderId}/cancel`, {
+      reason: 'Não posso mais receber',
+    });
     expect(res.body.status).toBe('CANCELLED_BY_CUSTOMER');
     await t.drain();
     const fee = (await t.read.intents(orderId)).find((i) => i.kind === 'CANCELLATION_FEE');
@@ -78,7 +93,10 @@ describe('I) cliente cancela em cada fase', () => {
     const pin = (await t.read.order(orderId))?.startPin;
     const started = await provider.api.post<{ status: string }>(`/v1/orders/${orderId}/start`, { pin });
     expect(started.body.status).toBe('IN_PROGRESS');
-    const res = await customer.api.post<{ error: { code: string; details: { status: string } } }>(`/v1/orders/${orderId}/cancel`, { reason: 'Quero cancelar' });
+    const res = await customer.api.post<{ error: { code: string; details: { status: string } } }>(
+      `/v1/orders/${orderId}/cancel`,
+      { reason: 'Quero cancelar' },
+    );
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INVALID_TRANSITION');
     expect(res.body.error.details.status).toBe('IN_PROGRESS');

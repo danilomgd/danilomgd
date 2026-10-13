@@ -1,4 +1,9 @@
-import { ConciergePlan, type ConciergeRequest, type ConciergeRequestInput, type Quote } from '@velio/contracts';
+import {
+  ConciergePlan,
+  type ConciergeRequest,
+  type ConciergeRequestInput,
+  type Quote,
+} from '@velio/contracts';
 import { needsHumanReview } from '@velio/domain';
 import { asc, eq } from 'drizzle-orm';
 import type { AppContext } from '../../context';
@@ -35,7 +40,16 @@ function toDto(r: ConciergeRow): ConciergeRequest {
 
 export function createConciergeService(
   ctx: AppContext,
-  deps: { orders: OrdersService; quotes: QuotesService; catalog: CatalogService; identity: IdentityService; geo: GeoService; assets: AssetsService; platform: PlatformService; communication: CommunicationService },
+  deps: {
+    orders: OrdersService;
+    quotes: QuotesService;
+    catalog: CatalogService;
+    identity: IdentityService;
+    geo: GeoService;
+    assets: AssetsService;
+    platform: PlatformService;
+    communication: CommunicationService;
+  },
 ) {
   const { db, adapters, log } = ctx;
   const system = { type: 'system' as const, userId: null };
@@ -49,7 +63,11 @@ export function createConciergeService(
   }
 
   async function byOrder(orderId: string, exec: Exec = db): Promise<ConciergeRow | null> {
-    const [r] = await exec.select().from(conciergeRequests).where(eq(conciergeRequests.orderId, orderId)).limit(1);
+    const [r] = await exec
+      .select()
+      .from(conciergeRequests)
+      .where(eq(conciergeRequests.orderId, orderId))
+      .limit(1);
     return r ?? null;
   }
 
@@ -61,12 +79,28 @@ export function createConciergeService(
       if (!service) throw errors.unprocessable('Serviço de concierge não configurado');
       const order = await deps.orders.createRequest(
         userId,
-        { serviceId: service.id, addressId: input.addressId, vehicleId: input.vehicleId, schedule: { mode: 'NOW' }, options: {}, mediaUrls: input.imageUrls, notes: input.text },
+        {
+          serviceId: service.id,
+          addressId: input.addressId,
+          vehicleId: input.vehicleId,
+          schedule: { mode: 'NOW' },
+          options: {},
+          mediaUrls: input.imageUrls,
+          notes: input.text,
+        },
         { relaxRequirements: true, priceOverrideCents: null },
       );
       const [row] = await db
         .insert(conciergeRequests)
-        .values({ orderId: order.id, customerId: userId, inputType: input.inputType, rawText: input.text ?? null, audioUrl: input.audioUrl ?? null, imageUrls: input.imageUrls, transcript: input.inputType === 'TEXT' ? (input.text ?? null) : null })
+        .values({
+          orderId: order.id,
+          customerId: userId,
+          inputType: input.inputType,
+          rawText: input.text ?? null,
+          audioUrl: input.audioUrl ?? null,
+          imageUrls: input.imageUrls,
+          transcript: input.inputType === 'TEXT' ? (input.text ?? null) : null,
+        })
         .returning();
       if (!row) throw new Error('Falha ao criar pedido de concierge');
       return toDto(row);
@@ -74,7 +108,8 @@ export function createConciergeService(
 
     async get(id: string, user: { userId: string; roles: string[] }): Promise<ConciergeRequest> {
       const r = await byIdOrOrder(id);
-      if (r.customerId !== user.userId && !user.roles.includes('operator') && !user.roles.includes('admin')) throw errors.forbidden();
+      if (r.customerId !== user.userId && !user.roles.includes('operator') && !user.roles.includes('admin'))
+        throw errors.forbidden();
       return toDto(r);
     },
 
@@ -91,7 +126,10 @@ export function createConciergeService(
       const user = await deps.identity.getUserRow(order.customerId);
       const vehicles = await deps.assets.listVehicles(order.customerId);
       const addresses = await deps.geo.listAddresses(order.customerId);
-      const text = [r.transcript ?? r.rawText ?? '', ...r.answers.map((a) => `${a.question}: ${a.answer}`)].join('\n');
+      const text = [
+        r.transcript ?? r.rawText ?? '',
+        ...r.answers.map((a) => `${a.question}: ${a.answer}`),
+      ].join('\n');
       let plan: ConciergePlan;
       try {
         const raw = await adapters.planner.plan(text, {
@@ -102,13 +140,22 @@ export function createConciergeService(
           settings: settings.concierge,
         });
         const parsed = ConciergePlan.safeParse(raw);
-        if (!parsed.success) throw new Error(`plano inválido: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`);
+        if (!parsed.success)
+          throw new Error(`plano inválido: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`);
         plan = parsed.data;
       } catch (err) {
         log.error({ err, orderId: order.id }, 'planejador falhou; encaminhando para humano');
         plan = {
           summary: 'Pedido encaminhado para análise da equipe.',
-          tasks: [{ seq: 1, title: 'Analisar pedido e montar plano', kind: 'CUSTOM', dependsOnSeq: [], notes: text.slice(0, 500) }],
+          tasks: [
+            {
+              seq: 1,
+              title: 'Analisar pedido e montar plano',
+              kind: 'CUSTOM',
+              dependsOnSeq: [],
+              notes: text.slice(0, 500),
+            },
+          ],
           estimateMinCents: 0,
           estimateMaxCents: 0,
           confidence: 0,
@@ -117,19 +164,32 @@ export function createConciergeService(
           requiresHumanReasons: ['Falha do planejador automático'],
         };
       }
-      await db.update(conciergeRequests).set({ plan, plannerName: adapters.planner.name }).where(eq(conciergeRequests.id, r.id));
+      await db
+        .update(conciergeRequests)
+        .set({ plan, plannerName: adapters.planner.name })
+        .where(eq(conciergeRequests.id, r.id));
       const review = needsHumanReview(plan, settings.concierge);
       if (review.required) {
-        await deps.orders.tryTransition(order.id, 'system.plan_needs_human', system, { reasons: review.reasons });
+        await deps.orders.tryTransition(order.id, 'system.plan_needs_human', system, {
+          reasons: review.reasons,
+        });
       } else {
-        await deps.orders.tryTransition(order.id, 'system.plan_ready', system, { confidence: plan.confidence, tasks: plan.tasks.length });
+        await deps.orders.tryTransition(order.id, 'system.plan_ready', system, {
+          confidence: plan.confidence,
+          tasks: plan.tasks.length,
+        });
       }
     },
 
     async approvePlanByCustomer(id: string, user: { userId: string }) {
       const r = await byIdOrOrder(id);
       if (r.customerId !== user.userId) throw errors.forbidden();
-      return deps.orders.transition(r.orderId, 'customer.approve_plan', { type: 'customer', userId: user.userId }, { conciergeRequestId: r.id });
+      return deps.orders.transition(
+        r.orderId,
+        'customer.approve_plan',
+        { type: 'customer', userId: user.userId },
+        { conciergeRequestId: r.id },
+      );
     },
 
     /** Operador revisa (opcionalmente edita) o plano e libera para o cliente. */
@@ -137,14 +197,30 @@ export function createConciergeService(
       const r = await byIdOrOrder(id);
       const finalPlan = plan ?? r.plan;
       if (!finalPlan) throw errors.unprocessable('Pedido sem plano para aprovar');
-      await db.update(conciergeRequests).set({ plan: { ...finalPlan, requiresHuman: false }, operatorUserId: operator.userId }).where(eq(conciergeRequests.id, r.id));
-      return deps.orders.transition(r.orderId, 'operator.approve_plan', { type: 'operator', userId: operator.userId }, { conciergeRequestId: r.id, edited: plan !== null });
+      await db
+        .update(conciergeRequests)
+        .set({ plan: { ...finalPlan, requiresHuman: false }, operatorUserId: operator.userId })
+        .where(eq(conciergeRequests.id, r.id));
+      return deps.orders.transition(
+        r.orderId,
+        'operator.approve_plan',
+        { type: 'operator', userId: operator.userId },
+        { conciergeRequestId: r.id, edited: plan !== null },
+      );
     },
 
-    async answer(id: string, user: { userId: string }, answers: Array<{ question: string; answer: string }>): Promise<ConciergeRequest> {
+    async answer(
+      id: string,
+      user: { userId: string },
+      answers: Array<{ question: string; answer: string }>,
+    ): Promise<ConciergeRequest> {
       const r = await byIdOrOrder(id);
       if (r.customerId !== user.userId) throw errors.forbidden();
-      const [row] = await db.update(conciergeRequests).set({ answers: [...r.answers, ...answers] }).where(eq(conciergeRequests.id, r.id)).returning();
+      const [row] = await db
+        .update(conciergeRequests)
+        .set({ answers: [...r.answers, ...answers] })
+        .where(eq(conciergeRequests.id, r.id))
+        .returning();
       if (!row) throw errors.notFound('Pedido de concierge');
       return toDto(row);
     },
@@ -154,10 +230,20 @@ export function createConciergeService(
       const r = await byOrder(order.id);
       if (!r?.plan) return null;
       const withEstimate = r.plan.tasks.filter((t) => typeof t.estimateCents === 'number');
-      const amount = withEstimate.length > 0 ? withEstimate.reduce((s, t) => s + (t.estimateCents ?? 0), 0) : r.plan.estimateMaxCents;
-      const items = withEstimate.map((t) => ({ description: t.title, quantity: 1, unitPriceCents: t.estimateCents ?? 0 }));
+      const amount =
+        withEstimate.length > 0
+          ? withEstimate.reduce((s, t) => s + (t.estimateCents ?? 0), 0)
+          : r.plan.estimateMaxCents;
+      const items = withEstimate.map((t) => ({
+        description: t.title,
+        quantity: 1,
+        unitPriceCents: t.estimateCents ?? 0,
+      }));
       const quote = await deps.quotes.createSystemInitial(order, amount, items, r.plan.summary);
-      await deps.orders.transition(order.id, 'provider.submit_quote', system, { quoteId: quote.id, amountCents: amount });
+      await deps.orders.transition(order.id, 'provider.submit_quote', system, {
+        quoteId: quote.id,
+        amountCents: amount,
+      });
       return quote;
     },
 
@@ -165,14 +251,26 @@ export function createConciergeService(
     async spawnChildren(order: OrderRow): Promise<void> {
       const r = await byOrder(order.id);
       if (!r?.plan) return;
-      const existing = await db.select({ id: orderTasks.id }).from(orderTasks).where(eq(orderTasks.orderId, order.id));
+      const existing = await db
+        .select({ id: orderTasks.id })
+        .from(orderTasks)
+        .where(eq(orderTasks.orderId, order.id));
       if (existing.length > 0) return;
       const vehicleId = (order.metadata as { vehicleId?: string | null }).vehicleId ?? null;
-      const [request] = await db.select().from(conciergeRequests).where(eq(conciergeRequests.orderId, order.id)).limit(1);
+      const [request] = await db
+        .select()
+        .from(conciergeRequests)
+        .where(eq(conciergeRequests.orderId, order.id))
+        .limit(1);
       void request;
       const addressId = await deps.geo
         .listAddresses(order.customerId)
-        .then((list) => list.find((a) => a.lat === order.lat && a.lng === order.lng)?.id ?? list.find((a) => a.isDefault)?.id ?? list[0]?.id);
+        .then(
+          (list) =>
+            list.find((a) => a.lat === order.lat && a.lng === order.lng)?.id ??
+            list.find((a) => a.isDefault)?.id ??
+            list[0]?.id,
+        );
       for (const t of r.plan.tasks) {
         let childOrderId: string | null = null;
         const service = t.serviceSlug ? await deps.catalog.getServiceBySlug(t.serviceSlug) : null;
@@ -184,19 +282,38 @@ export function createConciergeService(
                 serviceId: service.id,
                 addressId,
                 vehicleId: service.requiresVehicle && vehicleId ? vehicleId : undefined,
-                schedule: t.startsAt && new Date(t.startsAt).getTime() > adapters.clock.now().getTime() ? { mode: 'SCHEDULED', startsAt: t.startsAt, windowMinutes: 60 } : { mode: 'NOW' },
+                schedule:
+                  t.startsAt && new Date(t.startsAt).getTime() > adapters.clock.now().getTime()
+                    ? { mode: 'SCHEDULED', startsAt: t.startsAt, windowMinutes: 60 }
+                    : { mode: 'NOW' },
                 options: {},
                 mediaUrls: [],
                 notes: `[Concierge] ${t.title}`,
               },
-              { parentOrderId: order.id, priceOverrideCents: t.estimateCents ?? null, billedViaParent: true, relaxRequirements: true, actor: system },
+              {
+                parentOrderId: order.id,
+                priceOverrideCents: t.estimateCents ?? null,
+                billedViaParent: true,
+                relaxRequirements: true,
+                actor: system,
+              },
             );
             childOrderId = child.id;
           } catch (err) {
             log.error({ err, orderId: order.id, task: t.seq }, 'falha ao criar ordem filha');
           }
         }
-        await db.insert(orderTasks).values({ orderId: order.id, seq: t.seq, title: t.title, kind: t.kind, status: childOrderId ? 'IN_PROGRESS' : 'PENDING', childOrderId, dueAt: t.startsAt ? new Date(t.startsAt) : null, dependsOnSeq: t.dependsOnSeq, payload: { notes: t.notes ?? null, estimateCents: t.estimateCents ?? null } });
+        await db.insert(orderTasks).values({
+          orderId: order.id,
+          seq: t.seq,
+          title: t.title,
+          kind: t.kind,
+          status: childOrderId ? 'IN_PROGRESS' : 'PENDING',
+          childOrderId,
+          dueAt: t.startsAt ? new Date(t.startsAt) : null,
+          dependsOnSeq: t.dependsOnSeq,
+          payload: { notes: t.notes ?? null, estimateCents: t.estimateCents ?? null },
+        });
       }
     },
 
@@ -204,14 +321,25 @@ export function createConciergeService(
     async onChildTerminal(child: OrderRow): Promise<void> {
       if (!child.parentOrderId) return;
       const parent = await deps.orders.findById(child.parentOrderId);
-      if (!parent || parent.status !== 'IN_EXECUTION') return;
+      if (parent?.status !== 'IN_EXECUTION') return;
       const children = await deps.orders.listChildren(parent.id);
       const done = new Set(['COMPLETED', 'REVIEWED', 'CLOSED']);
-      await db.update(orderTasks).set({ status: done.has(child.status) ? 'DONE' : 'SKIPPED' }).where(eq(orderTasks.childOrderId, child.id));
+      await db
+        .update(orderTasks)
+        .set({ status: done.has(child.status) ? 'DONE' : 'SKIPPED' })
+        .where(eq(orderTasks.childOrderId, child.id));
       if (!deps.orders.childrenAllDone(children)) return;
-      const tasks = await db.select().from(orderTasks).where(eq(orderTasks.orderId, parent.id)).orderBy(asc(orderTasks.seq));
-      for (const t of tasks) if (t.status === 'PENDING' || t.status === 'IN_PROGRESS') await db.update(orderTasks).set({ status: 'DONE' }).where(eq(orderTasks.id, t.id));
-      await deps.orders.tryTransition(parent.id, 'system.children_completed', system, { children: children.length });
+      const tasks = await db
+        .select()
+        .from(orderTasks)
+        .where(eq(orderTasks.orderId, parent.id))
+        .orderBy(asc(orderTasks.seq));
+      for (const t of tasks)
+        if (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
+          await db.update(orderTasks).set({ status: 'DONE' }).where(eq(orderTasks.id, t.id));
+      await deps.orders.tryTransition(parent.id, 'system.children_completed', system, {
+        children: children.length,
+      });
     },
   };
 }

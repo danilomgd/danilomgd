@@ -113,7 +113,10 @@ export function createGeoService(ctx: AppContext) {
 
     async deleteAddress(userId: string, id: string): Promise<void> {
       await this.getAddress(userId, id);
-      await db.update(addresses).set({ deletedAt: adapters.clock.now(), isDefault: false }).where(eq(addresses.id, id));
+      await db
+        .update(addresses)
+        .set({ deletedAt: adapters.clock.now(), isDefault: false })
+        .where(eq(addresses.id, id));
     },
 
     admin: {

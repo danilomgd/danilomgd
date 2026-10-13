@@ -28,7 +28,15 @@ export function createPlatformService(ctx: AppContext) {
     });
     const value = parsed.success
       ? parsed.data
-      : PlatformSettings.parse({ cancellation: {}, offers: {}, quotes: {}, payouts: {}, concierge: {}, location: {}, reviews: {} });
+      : PlatformSettings.parse({
+          cancellation: {},
+          offers: {},
+          quotes: {},
+          payouts: {},
+          concierge: {},
+          location: {},
+          reviews: {},
+        });
     cache = { at: now, value };
     return value;
   }
@@ -42,7 +50,10 @@ export function createPlatformService(ctx: AppContext) {
         await db
           .insert(platformSettings)
           .values({ key, value, updatedByUserId: byUserId, updatedAt: now })
-          .onConflictDoUpdate({ target: platformSettings.key, set: { value, updatedByUserId: byUserId, updatedAt: now } });
+          .onConflictDoUpdate({
+            target: platformSettings.key,
+            set: { value, updatedByUserId: byUserId, updatedAt: now },
+          });
       }
       cache = null;
       return getSettings();
@@ -74,8 +85,12 @@ export function createPlatformService(ctx: AppContext) {
       return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
     },
 
-    async listAuditFor(targetType: string, targetId: string) {
-      return db.select().from(auditLogs).where(eq(auditLogs.targetId, targetId)).orderBy(desc(auditLogs.createdAt));
+    async listAuditFor(_targetType: string, targetId: string) {
+      return db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.targetId, targetId))
+        .orderBy(desc(auditLogs.createdAt));
     },
   };
 }

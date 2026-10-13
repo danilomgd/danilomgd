@@ -17,7 +17,8 @@ const otpRequestRateLimit = {
   rateLimit: {
     max: 5,
     timeWindow: '1 minute',
-    keyGenerator: (req: { ip: string; body: unknown }) => `${req.ip}:${(req.body as { phone?: string } | null)?.phone ?? ''}`,
+    keyGenerator: (req: { ip: string; body: unknown }) =>
+      `${req.ip}:${(req.body as { phone?: string } | null)?.phone ?? ''}`,
   },
 };
 /** Verificação por IP+desafio; a regra de negócio (5 tentativas) é aplicada antes deste teto. */
@@ -25,7 +26,8 @@ const otpVerifyRateLimit = {
   rateLimit: {
     max: 10,
     timeWindow: '1 minute',
-    keyGenerator: (req: { ip: string; body: unknown }) => `${req.ip}:${(req.body as { challengeId?: string } | null)?.challengeId ?? ''}`,
+    keyGenerator: (req: { ip: string; body: unknown }) =>
+      `${req.ip}:${(req.body as { challengeId?: string } | null)?.challengeId ?? ''}`,
   },
 };
 
@@ -40,10 +42,14 @@ export function registerIdentityRoutes(app: FastifyInstance, svc: IdentityServic
     return svc.verifyOtp(b.challengeId, b.code, b.deviceName);
   });
 
-  app.post('/v1/auth/password/login', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
-    const b = parse(PasswordLoginInput, req.body);
-    return svc.passwordLogin(b.email, b.password);
-  });
+  app.post(
+    '/v1/auth/password/login',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const b = parse(PasswordLoginInput, req.body);
+      return svc.passwordLogin(b.email, b.password);
+    },
+  );
 
   app.post('/v1/auth/refresh', async (req) => {
     const b = parse(RefreshInput, req.body);

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DAY, DEFAULT_NOW, type TestApp, createTestApp } from '../harness';
+import { createTestApp, DAY, DEFAULT_NOW, type TestApp } from '../harness';
 
 describe('C) assinatura Plano Residencial', () => {
   let t: TestApp;
@@ -14,12 +14,22 @@ describe('C) assinatura Plano Residencial', () => {
     const customer = await t.asCustomer('+5511999990003', { name: 'Ana Souza' });
     const sevenMonthsAgo = new Date(DEFAULT_NOW);
     sevenMonthsAgo.setMonth(sevenMonthsAgo.getMonth() - 7);
-    const eq1 = await customer.api.post<{ id: string; nextMaintenanceDueAt: string }>('/v1/me/equipments', { kind: 'AIR_CONDITIONER', brand: 'Samsung', room: 'Sala', lastMaintenanceAt: sevenMonthsAgo.toISOString(), maintenanceIntervalMonths: 6 });
+    const eq1 = await customer.api.post<{ id: string; nextMaintenanceDueAt: string }>('/v1/me/equipments', {
+      kind: 'AIR_CONDITIONER',
+      brand: 'Samsung',
+      room: 'Sala',
+      lastMaintenanceAt: sevenMonthsAgo.toISOString(),
+      maintenanceIntervalMonths: 6,
+    });
     expect(eq1.status).toBe(201);
     expect(new Date(eq1.body.nextMaintenanceDueAt).getTime()).toBeLessThan(DEFAULT_NOW.getTime());
 
     // Home: contextHint com fonte real equipment_due.
-    const home = await customer.api.get<{ greeting: string; contextHint: { source: string; text: string }; sections: Array<{ id: string; items: unknown[] }> }>('/v1/catalog/home');
+    const home = await customer.api.get<{
+      greeting: string;
+      contextHint: { source: string; text: string };
+      sections: Array<{ id: string; items: unknown[] }>;
+    }>('/v1/catalog/home');
     expect(home.status).toBe(200);
     expect(home.body.greeting).toBe('Bom dia, Ana!');
     expect(home.body.contextHint.source).toBe('equipment_due');
@@ -28,11 +38,25 @@ describe('C) assinatura Plano Residencial', () => {
     expect(home.body.sections.find((s) => s.id === 'morning')).toBeDefined(); // 09:00 em SP
     expect(home.body.sections.find((s) => s.id === 'evening')).toBeUndefined();
 
-    const plans = await t.anon.get<Array<{ id: string; slug: string; priceCents: number; serviceId: string }>>('/v1/catalog/plans');
+    const plans =
+      await t.anon.get<Array<{ id: string; slug: string; priceCents: number; serviceId: string }>>(
+        '/v1/catalog/plans',
+      );
     const plan = plans.body.find((p) => p.slug === 'ac-residencial');
     expect(plan).toBeDefined();
 
-    const sub = await customer.api.post<{ id: string; status: string; nextVisitDueAt: string; nextChargeAt: string }>('/v1/me/subscriptions', { planId: plan?.id, equipmentIds: [eq1.body.id], addressId: customer.addressId, paymentMethodId: customer.paymentMethodId, preferredPeriod: 'MORNING' });
+    const sub = await customer.api.post<{
+      id: string;
+      status: string;
+      nextVisitDueAt: string;
+      nextChargeAt: string;
+    }>('/v1/me/subscriptions', {
+      planId: plan?.id,
+      equipmentIds: [eq1.body.id],
+      addressId: customer.addressId,
+      paymentMethodId: customer.paymentMethodId,
+      preferredPeriod: 'MORNING',
+    });
     expect(sub.status, JSON.stringify(sub.body)).toBe(201);
     expect(sub.body.status).toBe('ACTIVE');
     const due = new Date(sub.body.nextVisitDueAt);
@@ -67,7 +91,9 @@ describe('C) assinatura Plano Residencial', () => {
     expect(new Date(mine.body[0]?.nextVisitDueAt ?? 0).getTime()).toBeGreaterThan(due.getTime());
 
     // Cancelamento encerra e evita novas visitas.
-    const cancel = await customer.api.post<{ status: string }>(`/v1/me/subscriptions/${sub.body.id}/cancel`, { reason: 'Mudei de casa' });
+    const cancel = await customer.api.post<{ status: string }>(`/v1/me/subscriptions/${sub.body.id}/cancel`, {
+      reason: 'Mudei de casa',
+    });
     expect(cancel.body.status).toBe('CANCELLED');
   });
 });

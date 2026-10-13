@@ -30,7 +30,11 @@ export function addMonths(d: Date, months: number): Date {
 /** Hora local (0-23) em um fuso IANA, sem dependências. */
 export function hourInTimezone(d: Date, timeZone: string): number {
   try {
-    const parts = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone }).formatToParts(d);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      hour12: false,
+      timeZone,
+    }).formatToParts(d);
     const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
     return h === 24 ? 0 : h;
   } catch {

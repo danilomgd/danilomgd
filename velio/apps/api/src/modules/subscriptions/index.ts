@@ -12,7 +12,14 @@ import { createSubscriptionsService, type SubscriptionsService } from './service
 export function registerSubscriptionsModule(
   app: FastifyInstance,
   ctx: AppContext,
-  deps: { orders: OrdersService; payments: PaymentsService; assets: AssetsService; geo: GeoService; identity: IdentityService; analytics: AnalyticsService },
+  deps: {
+    orders: OrdersService;
+    payments: PaymentsService;
+    assets: AssetsService;
+    geo: GeoService;
+    identity: IdentityService;
+    analytics: AnalyticsService;
+  },
 ): SubscriptionsService {
   const svc = createSubscriptionsService(ctx, deps);
   registerSubscriptionsRoutes(app, svc);

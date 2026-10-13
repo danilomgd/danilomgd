@@ -1,7 +1,7 @@
 import type { Equipment, EquipmentInput, Vehicle, VehicleInput } from '@velio/contracts';
-import type { z } from 'zod';
 import { maintenanceDue } from '@velio/domain';
 import { and, asc, eq, isNull } from 'drizzle-orm';
+import type { z } from 'zod';
 import type { AppContext } from '../../context';
 import { equipments, vehicles } from '../../db/schema';
 import { errors } from '../../lib/errors';

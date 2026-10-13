@@ -11,23 +11,46 @@ import type { SupportService } from '../support/service';
 
 export function registerOpsRoutes(
   app: FastifyInstance,
-  deps: { orders: OrdersService; dispatch: DispatchService; providers: ProvidersService; support: SupportService; platform: PlatformService },
+  deps: {
+    orders: OrdersService;
+    dispatch: DispatchService;
+    providers: ProvidersService;
+    support: SupportService;
+    platform: PlatformService;
+  },
   clock: { now(): Date },
 ) {
   const ops = async (req: Parameters<typeof requireRole>[0]) => requireRole(req, 'operator', 'admin');
 
   app.get('/v1/ops/map', async (req) => {
     await ops(req);
-    const orders = await Promise.all((await deps.orders.listActiveWithCoords()).map((o) => deps.orders.toDto(o)));
+    const orders = await Promise.all(
+      (await deps.orders.listActiveWithCoords()).map((o) => deps.orders.toDto(o)),
+    );
     const providers = (await deps.providers.listOnline())
       .filter((p) => p.lastLat !== null && p.lastLng !== null)
-      .map((p) => ({ id: p.id, displayName: p.displayName, availability: p.availability, lat: p.lastLat ?? 0, lng: p.lastLng ?? 0, lastLocationAt: p.lastLocationAt?.toISOString() ?? null }));
+      .map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        availability: p.availability,
+        lat: p.lastLat ?? 0,
+        lng: p.lastLng ?? 0,
+        lastLocationAt: p.lastLocationAt?.toISOString() ?? null,
+      }));
     return { orders, providers };
   });
 
   app.get('/v1/ops/orders', async (req) => {
     await ops(req);
-    const q = parse(z.object({ status: z.string().optional(), attention: z.coerce.boolean().optional(), cursor: z.string().optional(), limit: z.coerce.number().int().min(1).max(100).default(50) }), req.query ?? {});
+    const q = parse(
+      z.object({
+        status: z.string().optional(),
+        attention: z.coerce.boolean().optional(),
+        cursor: z.string().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      }),
+      req.query ?? {},
+    );
     return deps.orders.listForOps(q, clock.now());
   });
 
@@ -49,7 +72,15 @@ export function registerOpsRoutes(
     const a = await ops(req);
     const b = parse(ManualAssignInput, req.body);
     const o = await deps.dispatch.assign(req.params.id, b.providerId, a, b.note);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'operator', action: 'ops.assign', targetType: 'order', targetId: o.id, after: { providerId: b.providerId, note: b.note ?? null }, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'operator',
+      action: 'ops.assign',
+      targetType: 'order',
+      targetId: o.id,
+      after: { providerId: b.providerId, note: b.note ?? null },
+      ip: req.ip,
+    });
     return deps.orders.toDetail(o, actorFrom(a));
   });
 
@@ -57,8 +88,19 @@ export function registerOpsRoutes(
     const a = await ops(req);
     const b = parse(CancelInput, req.body);
     const before = await deps.orders.getById(req.params.id);
-    const o = await deps.orders.transition(req.params.id, 'operator.cancel', actorFrom(a), { reason: b.reason });
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'operator', action: 'ops.cancel', targetType: 'order', targetId: o.id, before: { status: before.status }, after: { status: o.status, reason: b.reason }, ip: req.ip });
+    const o = await deps.orders.transition(req.params.id, 'operator.cancel', actorFrom(a), {
+      reason: b.reason,
+    });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'operator',
+      action: 'ops.cancel',
+      targetType: 'order',
+      targetId: o.id,
+      before: { status: before.status },
+      after: { status: o.status, reason: b.reason },
+      ip: req.ip,
+    });
     return deps.orders.toDetail(o, actorFrom(a));
   });
 
@@ -71,7 +113,14 @@ export function registerOpsRoutes(
   app.post<{ Params: { id: string } }>('/v1/ops/incidents/:id/resolve', async (req) => {
     const a = await ops(req);
     const r = await deps.support.resolveIncident(req.params.id, a.userId);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'operator', action: 'ops.incident.resolve', targetType: 'incident', targetId: r.id, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'operator',
+      action: 'ops.incident.resolve',
+      targetType: 'incident',
+      targetId: r.id,
+      ip: req.ip,
+    });
     return r;
   });
 
@@ -85,7 +134,15 @@ export function registerOpsRoutes(
     const a = await ops(req);
     const b = parse(ResolveDisputeInput, req.body);
     const d = await deps.support.resolveDispute(req.params.id, a, b);
-    await deps.platform.audit({ actorUserId: a.userId, actorRole: 'operator', action: 'ops.dispute.resolve', targetType: 'dispute', targetId: d.id, after: { outcome: b.outcome, refundCents: b.refundCents }, ip: req.ip });
+    await deps.platform.audit({
+      actorUserId: a.userId,
+      actorRole: 'operator',
+      action: 'ops.dispute.resolve',
+      targetType: 'dispute',
+      targetId: d.id,
+      after: { outcome: b.outcome, refundCents: b.refundCents },
+      ip: req.ip,
+    });
     return d;
   });
 

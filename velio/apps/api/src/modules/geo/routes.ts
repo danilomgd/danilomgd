@@ -5,7 +5,9 @@ import { parse } from '../../lib/validate';
 import type { GeoService } from './service';
 
 export function registerGeoRoutes(app: FastifyInstance, svc: GeoService) {
-  app.get('/v1/geo/regions', async () => (await svc.listRegions()).map((r) => ({ id: r.id, name: r.name, city: r.city, state: r.state })));
+  app.get('/v1/geo/regions', async () =>
+    (await svc.listRegions()).map((r) => ({ id: r.id, name: r.name, city: r.city, state: r.state })),
+  );
 
   app.get('/v1/me/addresses', async (req) => svc.listAddresses(requireAuth(req).userId));
 

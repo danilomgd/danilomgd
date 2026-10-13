@@ -9,7 +9,12 @@ import { createProvidersService, type ProvidersService } from './service';
 
 export function createProvidersModule(
   ctx: AppContext,
-  deps: { identity: IdentityService; catalog: CatalogService; wallet: WalletService; platform: PlatformService },
+  deps: {
+    identity: IdentityService;
+    catalog: CatalogService;
+    wallet: WalletService;
+    platform: PlatformService;
+  },
 ): ProvidersService {
   const svc = createProvidersService(ctx, deps);
   svc.registerRealtime();

@@ -8,7 +8,12 @@ import type { PaymentsService } from './service';
 export function registerPaymentsRoutes(
   app: FastifyInstance,
   svc: PaymentsService,
-  canAccessOrder: (userId: string, roles: string[], providerId: string | null, orderId: string) => Promise<boolean>,
+  canAccessOrder: (
+    userId: string,
+    roles: string[],
+    providerId: string | null,
+    orderId: string,
+  ) => Promise<boolean>,
 ) {
   app.get('/v1/me/payment-methods', async (req) => svc.listMethods(requireAuth(req).userId));
   app.post('/v1/me/payment-methods', async (req, reply) => {
@@ -32,8 +37,16 @@ export function registerPaymentsRoutes(
     return reply.status(201).send(await svc.createIntentForOrder(req.params.id, a.userId, b));
   });
 
-  app.post<{ Params: { gateway: string } }>('/v1/payments/webhooks/:gateway', { config: { rateLimit: false } }, async (req) => {
-    const raw = (req as { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
-    return svc.handleWebhook(req.params.gateway, raw, req.headers as Record<string, string | string[] | undefined>);
-  });
+  app.post<{ Params: { gateway: string } }>(
+    '/v1/payments/webhooks/:gateway',
+    { config: { rateLimit: false } },
+    async (req) => {
+      const raw = (req as { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
+      return svc.handleWebhook(
+        req.params.gateway,
+        raw,
+        req.headers as Record<string, string | string[] | undefined>,
+      );
+    },
+  );
 }

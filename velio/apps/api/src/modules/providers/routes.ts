@@ -16,11 +16,18 @@ import type { ProvidersService } from './service';
 /** Dependências de outros módulos usadas apenas pelas rotas do prestador. */
 export interface ProviderRouteDeps {
   listOffers(providerId: string): Promise<unknown[]>;
-  listOrders(providerId: string, q: { scope: 'active' | 'history' | 'all'; cursor?: string; limit: number }): Promise<unknown>;
+  listOrders(
+    providerId: string,
+    q: { scope: 'active' | 'history' | 'all'; cursor?: string; limit: number },
+  ): Promise<unknown>;
   indicators(providerId: string, days: number): Promise<unknown>;
 }
 
-export function registerProvidersRoutes(app: FastifyInstance, svc: ProvidersService, deps: ProviderRouteDeps) {
+export function registerProvidersRoutes(
+  app: FastifyInstance,
+  svc: ProvidersService,
+  deps: ProviderRouteDeps,
+) {
   app.post('/v1/providers/me', async (req, reply) => {
     const a = requireAuth(req);
     const me = await svc.onboard(a.userId, parse(ProviderOnboardingInput, req.body));

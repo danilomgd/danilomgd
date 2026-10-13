@@ -10,16 +10,25 @@ import type { IdentityService } from '../identity/service';
 
 /** Textos de notificação em pt-BR. `data` sempre carrega `orderId` quando houver. */
 const TEMPLATES: Record<NotificationKind, { title: string; body: string }> = {
-  provider_found: { title: 'Profissional confirmado', body: 'Encontramos um profissional para o seu pedido.' },
+  provider_found: {
+    title: 'Profissional confirmado',
+    body: 'Encontramos um profissional para o seu pedido.',
+  },
   provider_en_route: { title: 'A caminho', body: 'Seu profissional está a caminho.' },
   provider_arriving: { title: 'Chegou', body: 'Seu profissional chegou ao local.' },
   service_started: { title: 'Serviço iniciado', body: 'O serviço começou. Acompanhe pelo app.' },
   quote_available: { title: 'Orçamento disponível', body: 'Você tem um orçamento para aprovar.' },
   payment_approved: { title: 'Pagamento aprovado', body: 'Seu pagamento foi autorizado.' },
-  payment_failed: { title: 'Pagamento recusado', body: 'Não conseguimos autorizar o pagamento. Troque o método para continuar.' },
+  payment_failed: {
+    title: 'Pagamento recusado',
+    body: 'Não conseguimos autorizar o pagamento. Troque o método para continuar.',
+  },
   service_completed: { title: 'Serviço concluído', body: 'Seu serviço foi concluído.' },
   review_request: { title: 'Como foi o atendimento?', body: 'Avalie o profissional em poucos toques.' },
-  offer_received: { title: 'Nova oferta de serviço', body: 'Você recebeu uma oferta. Responda antes que expire.' },
+  offer_received: {
+    title: 'Nova oferta de serviço',
+    body: 'Você recebeu uma oferta. Responda antes que expire.',
+  },
   offer_expired: { title: 'Oferta expirada', body: 'A oferta expirou.' },
   order_cancelled: { title: 'Pedido cancelado', body: 'Um pedido foi cancelado.' },
   booking_reminder: { title: 'Lembrete de agendamento', body: 'Seu serviço agendado está próximo.' },
@@ -46,7 +55,9 @@ export function toMessageDto(m: typeof messages.$inferSelect): Message {
 
 export interface CommunicationSources {
   /** Participantes de uma ordem: cliente e usuário do prestador (se houver). */
-  orderParticipants(orderId: string): Promise<{ customerUserId: string; providerUserId: string | null } | null>;
+  orderParticipants(
+    orderId: string,
+  ): Promise<{ customerUserId: string; providerUserId: string | null } | null>;
   providerUserId(providerId: string): Promise<string | null>;
 }
 
@@ -54,7 +65,11 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
   const { db, adapters, outbox, log } = ctx;
   let sources: CommunicationSources | null = null;
 
-  async function getConversation(orderId: string, kind: string, exec: Exec = db): Promise<ConversationRow | null> {
+  async function getConversation(
+    orderId: string,
+    kind: string,
+    exec: Exec = db,
+  ): Promise<ConversationRow | null> {
     const [c] = await exec
       .select()
       .from(conversations)
@@ -64,10 +79,7 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
   }
 
   async function addParticipant(conversationId: string, userId: string, role: string) {
-    await db
-      .insert(conversationParticipants)
-      .values({ conversationId, userId, role })
-      .onConflictDoNothing();
+    await db.insert(conversationParticipants).values({ conversationId, userId, role }).onConflictDoNothing();
   }
 
   /** Conversa cliente ↔ prestador da ordem (criada sob demanda; participantes sincronizados). */
@@ -92,10 +104,19 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
 
   async function insertMessage(
     conversation: ConversationRow,
-    values: { senderType: string; senderUserId: string | null; body: string | null; mediaUrl: string | null; systemKind: string | null },
+    values: {
+      senderType: string;
+      senderUserId: string | null;
+      body: string | null;
+      mediaUrl: string | null;
+      systemKind: string | null;
+    },
   ): Promise<Message> {
     const now = adapters.clock.now();
-    const [m] = await db.insert(messages).values({ conversationId: conversation.id, ...values }).returning();
+    const [m] = await db
+      .insert(messages)
+      .values({ conversationId: conversation.id, ...values })
+      .returning();
     if (!m) throw new Error('Falha ao gravar mensagem');
     await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversation.id));
     await outbox.publish(db, {
@@ -107,7 +128,12 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
     return toMessageDto(m);
   }
 
-  async function notifyUser(userId: string, kind: NotificationKind, data: Record<string, unknown> = {}, override: { title?: string; body?: string } = {}): Promise<Notification> {
+  async function notifyUser(
+    userId: string,
+    kind: NotificationKind,
+    data: Record<string, unknown> = {},
+    override: { title?: string; body?: string } = {},
+  ): Promise<Notification> {
     const now = adapters.clock.now();
     const tpl = TEMPLATES[kind];
     const title = override.title ?? tpl.title;
@@ -121,10 +147,28 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
     if (tokens.length > 0) {
       try {
         const r = await adapters.push.send(tokens, { title, body, data: { ...data, kind } });
-        await db.insert(notifications).values({ userId, kind, channel: 'PUSH', title, body, data, status: r.sent > 0 ? 'SENT' : 'FAILED', sentAt: now });
+        await db.insert(notifications).values({
+          userId,
+          kind,
+          channel: 'PUSH',
+          title,
+          body,
+          data,
+          status: r.sent > 0 ? 'SENT' : 'FAILED',
+          sentAt: now,
+        });
       } catch (err) {
         log.warn({ err, userId }, 'falha ao enviar push');
-        await db.insert(notifications).values({ userId, kind, channel: 'PUSH', title, body, data, status: 'FAILED', error: String((err as Error).message) });
+        await db.insert(notifications).values({
+          userId,
+          kind,
+          channel: 'PUSH',
+          title,
+          body,
+          data,
+          status: 'FAILED',
+          error: String((err as Error).message),
+        });
       }
     }
     await outbox.publish(db, {
@@ -152,7 +196,12 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
     ensureOrderConversation,
     notifyUser,
 
-    async notifyProvider(providerId: string, kind: NotificationKind, data: Record<string, unknown> = {}, override: { title?: string; body?: string } = {}) {
+    async notifyProvider(
+      providerId: string,
+      kind: NotificationKind,
+      data: Record<string, unknown> = {},
+      override: { title?: string; body?: string } = {},
+    ) {
       const userId = sources ? await sources.providerUserId(providerId) : null;
       if (!userId) return null;
       return notifyUser(userId, kind, data, override);
@@ -164,13 +213,22 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
       return insertMessage(c, { senderType: 'system', senderUserId: null, body, mediaUrl: null, systemKind });
     },
 
-    async sendMessage(orderId: string, user: { userId: string; roles: string[] }, input: z.infer<typeof SendMessageInput>): Promise<Message> {
+    async sendMessage(
+      orderId: string,
+      user: { userId: string; roles: string[] },
+      input: z.infer<typeof SendMessageInput>,
+    ): Promise<Message> {
       const c = await ensureOrderConversation(orderId);
       const isOps = user.roles.includes('operator') || user.roles.includes('admin');
       const [part] = await db
         .select()
         .from(conversationParticipants)
-        .where(and(eq(conversationParticipants.conversationId, c.id), eq(conversationParticipants.userId, user.userId)))
+        .where(
+          and(
+            eq(conversationParticipants.conversationId, c.id),
+            eq(conversationParticipants.userId, user.userId),
+          ),
+        )
         .limit(1);
       if (!part && !isOps) throw errors.forbidden('Você não participa desta conversa');
       if (c.closedAt) throw errors.conflict('Conversa encerrada');
@@ -189,18 +247,38 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
       const [part] = await db
         .select()
         .from(conversationParticipants)
-        .where(and(eq(conversationParticipants.conversationId, c.id), eq(conversationParticipants.userId, user.userId)))
+        .where(
+          and(
+            eq(conversationParticipants.conversationId, c.id),
+            eq(conversationParticipants.userId, user.userId),
+          ),
+        )
         .limit(1);
       if (!part && !isOps) throw errors.forbidden('Você não participa desta conversa');
-      const rows = await db.select().from(messages).where(eq(messages.conversationId, c.id)).orderBy(asc(messages.createdAt)).limit(200);
+      const rows = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, c.id))
+        .orderBy(asc(messages.createdAt))
+        .limit(200);
       return rows.map(toMessageDto);
     },
 
     async createSupportConversation(userId: string, orderId: string | null): Promise<string> {
-      const [c] = await db.insert(conversations).values({ orderId: null, kind: 'CUSTOMER_SUPPORT' }).returning();
+      const [c] = await db
+        .insert(conversations)
+        .values({ orderId: null, kind: 'CUSTOMER_SUPPORT' })
+        .returning();
       if (!c) throw new Error('Falha ao criar conversa de suporte');
       await addParticipant(c.id, userId, 'customer');
-      if (orderId) await insertMessage(c, { senderType: 'system', senderUserId: null, body: `Ticket vinculado à ordem ${orderId}`, mediaUrl: null, systemKind: 'ticket_order_link' });
+      if (orderId)
+        await insertMessage(c, {
+          senderType: 'system',
+          senderUserId: null,
+          body: `Ticket vinculado à ordem ${orderId}`,
+          mediaUrl: null,
+          systemKind: 'ticket_order_link',
+        });
       return c.id;
     },
 
@@ -224,7 +302,10 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
     },
 
     async markRead(userId: string, id: string) {
-      await db.update(notifications).set({ readAt: adapters.clock.now() }).where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+      await db
+        .update(notifications)
+        .set({ readAt: adapters.clock.now() })
+        .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
     },
 
     registerRealtime() {
@@ -234,7 +315,9 @@ export function createCommunicationService(ctx: AppContext, deps: { identity: Id
       });
       outbox.on('notification.created', async (ev) => {
         const p = ev.payload as { userId: string; notificationId: string; kind: string };
-        ctx.io?.to(rooms.user(p.userId)).emit('notification.created', { notificationId: p.notificationId, kind: p.kind });
+        ctx.io
+          ?.to(rooms.user(p.userId))
+          .emit('notification.created', { notificationId: p.notificationId, kind: p.kind });
       });
     },
   };

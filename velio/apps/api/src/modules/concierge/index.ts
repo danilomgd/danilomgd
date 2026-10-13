@@ -14,7 +14,16 @@ import { type ConciergeService, createConciergeService } from './service';
 export function registerConciergeModule(
   app: FastifyInstance,
   ctx: AppContext,
-  deps: { orders: OrdersService; quotes: QuotesService; catalog: CatalogService; identity: IdentityService; geo: GeoService; assets: AssetsService; platform: PlatformService; communication: CommunicationService },
+  deps: {
+    orders: OrdersService;
+    quotes: QuotesService;
+    catalog: CatalogService;
+    identity: IdentityService;
+    geo: GeoService;
+    assets: AssetsService;
+    platform: PlatformService;
+    communication: CommunicationService;
+  },
 ): ConciergeService {
   const svc = createConciergeService(ctx, deps);
   registerConciergeRoutes(app, svc, deps.orders, deps.platform);
@@ -22,7 +31,8 @@ export function registerConciergeModule(
     const orderId = String(p.orderId);
     const o = await deps.orders.findById(orderId);
     if (!o) return;
-    if (o.status === 'SUBMITTED') await deps.orders.tryTransition(orderId, 'system.start_matching', { type: 'system', userId: null }, {});
+    if (o.status === 'SUBMITTED')
+      await deps.orders.tryTransition(orderId, 'system.start_matching', { type: 'system', userId: null }, {});
     else if (o.status === 'INTERPRETING') await svc.runPlanner(o);
   });
   return svc;

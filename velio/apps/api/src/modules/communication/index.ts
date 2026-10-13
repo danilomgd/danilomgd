@@ -9,7 +9,12 @@ export function registerCommunicationModule(
   ctx: AppContext,
   deps: {
     identity: IdentityService;
-    canAccessOrder: (userId: string, roles: string[], providerId: string | null, orderId: string) => Promise<boolean>;
+    canAccessOrder: (
+      userId: string,
+      roles: string[],
+      providerId: string | null,
+      orderId: string,
+    ) => Promise<boolean>;
   },
 ): CommunicationService {
   const svc = createCommunicationService(ctx, { identity: deps.identity });

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DAY, DEFAULT_NOW, HOUR, PHOTO, type TestApp, createTestApp, transition } from '../harness';
+import { createTestApp, DAY, DEFAULT_NOW, HOUR, PHOTO, type TestApp, transition } from '../harness';
 
 describe('B) agendar limpeza de ar-condicionado para daqui a 2 dias', () => {
   let t: TestApp;
@@ -13,12 +13,23 @@ describe('B) agendar limpeza de ar-condicionado para daqui a 2 dias', () => {
   it('matching começa 6h antes, lembretes 24h e 1h, execução no dia', async () => {
     const customer = await t.asCustomer('+5511999990002');
     const provider = await t.asProvider('+5511988880010', { categorySlugs: ['ar-condicionado'] });
-    const eq = await customer.api.post<{ id: string }>('/v1/me/equipments', { kind: 'AIR_CONDITIONER', brand: 'LG', room: 'Quarto', btus: 12000, lastMaintenanceAt: new Date(DEFAULT_NOW.getTime() - 200 * DAY).toISOString() });
+    const eq = await customer.api.post<{ id: string }>('/v1/me/equipments', {
+      kind: 'AIR_CONDITIONER',
+      brand: 'LG',
+      room: 'Quarto',
+      btus: 12000,
+      lastMaintenanceAt: new Date(DEFAULT_NOW.getTime() - 200 * DAY).toISOString(),
+    });
     expect(eq.status).toBe(201);
     const service = await t.read.service('ac-limpeza');
     const startsAt = new Date(DEFAULT_NOW.getTime() + 2 * DAY);
 
-    const created = await customer.api.post<{ id: string; status: string; startPin: string; scheduledFor: string }>('/v1/requests', {
+    const created = await customer.api.post<{
+      id: string;
+      status: string;
+      startPin: string;
+      scheduledFor: string;
+    }>('/v1/requests', {
       serviceId: service?.id,
       addressId: customer.addressId,
       equipmentId: eq.body.id,
@@ -49,7 +60,10 @@ describe('B) agendar limpeza de ar-condicionado para daqui a 2 dias', () => {
     // 6h antes: matching → ofertas → aceite.
     await t.advanceTo(new Date(startsAt.getTime() - 6 * HOUR));
     expect((await t.read.order(orderId))?.status).toBe('OFFERED');
-    const offers = await provider.api.get<Array<{ id: string; summary: { scheduledFor: string } }>>('/v1/providers/me/offers');
+    const offers =
+      await provider.api.get<Array<{ id: string; summary: { scheduledFor: string } }>>(
+        '/v1/providers/me/offers',
+      );
     expect(offers.body).toHaveLength(1);
     expect(offers.body[0]?.summary.scheduledFor).toBe(startsAt.toISOString());
     const accepted = await provider.api.post<{ status: string }>(`/v1/offers/${offers.body[0]?.id}/accept`);
@@ -62,14 +76,18 @@ describe('B) agendar limpeza de ar-condicionado para daqui a 2 dias', () => {
     expect((await t.read.order(orderId))?.status).toBe('REMINDED');
     notifs = await t.read.notifications(customer.userId);
     expect(notifs.filter((n) => n.kind === 'booking_reminder')).toHaveLength(2);
-    expect((await t.read.notifications(provider.userId)).some((n) => n.kind === 'booking_reminder')).toBe(true);
+    expect((await t.read.notifications(provider.userId)).some((n) => n.kind === 'booking_reminder')).toBe(
+      true,
+    );
 
     // Execução no dia.
     await t.advanceTo(startsAt);
     expect((await transition(provider.api, orderId, 'provider.en_route')).body.status).toBe('EN_ROUTE');
     expect((await transition(provider.api, orderId, 'provider.arrive')).body.status).toBe('ARRIVED');
     await provider.api.post(`/v1/orders/${orderId}/evidence`, { kind: 'BEFORE', url: PHOTO });
-    const started = await provider.api.post<{ status: string }>(`/v1/orders/${orderId}/start`, { pin: created.body.startPin });
+    const started = await provider.api.post<{ status: string }>(`/v1/orders/${orderId}/start`, {
+      pin: created.body.startPin,
+    });
     expect(started.status, JSON.stringify(started.body)).toBe(200);
     await provider.api.post(`/v1/orders/${orderId}/evidence`, { kind: 'AFTER', url: PHOTO });
     const done = await provider.api.post<{ status: string }>(`/v1/orders/${orderId}/complete`, {});

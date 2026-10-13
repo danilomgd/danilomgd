@@ -10,7 +10,13 @@ import { registerOpsRoutes } from './routes';
 export function registerOpsModule(
   app: FastifyInstance,
   ctx: AppContext,
-  deps: { orders: OrdersService; dispatch: DispatchService; providers: ProvidersService; support: SupportService; platform: PlatformService },
+  deps: {
+    orders: OrdersService;
+    dispatch: DispatchService;
+    providers: ProvidersService;
+    support: SupportService;
+    platform: PlatformService;
+  },
 ) {
   registerOpsRoutes(app, deps, ctx.adapters.clock);
 }

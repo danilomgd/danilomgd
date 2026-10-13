@@ -11,7 +11,13 @@ import { createDispatchService, type DispatchService } from './service';
 export function registerDispatchModule(
   app: FastifyInstance,
   ctx: AppContext,
-  deps: { orders: OrdersService; providers: ProvidersService; catalog: CatalogService; communication: CommunicationService; reputation: ReputationService },
+  deps: {
+    orders: OrdersService;
+    providers: ProvidersService;
+    catalog: CatalogService;
+    communication: CommunicationService;
+    reputation: ReputationService;
+  },
 ): DispatchService {
   const svc = createDispatchService(ctx, deps);
   registerDispatchRoutes(app, svc, deps.orders);

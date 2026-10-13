@@ -9,7 +9,12 @@ import type { CommunicationService } from './service';
 export function registerCommunicationRoutes(
   app: FastifyInstance,
   svc: CommunicationService,
-  canAccessOrder: (userId: string, roles: string[], providerId: string | null, orderId: string) => Promise<boolean>,
+  canAccessOrder: (
+    userId: string,
+    roles: string[],
+    providerId: string | null,
+    orderId: string,
+  ) => Promise<boolean>,
 ) {
   app.get('/v1/me/notifications', async (req) => svc.listNotifications(requireAuth(req).userId));
 

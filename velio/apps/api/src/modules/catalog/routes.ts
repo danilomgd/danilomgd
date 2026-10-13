@@ -7,7 +7,10 @@ import { type CatalogService, toCategoryDto, toServiceDto, toServiceSummary } fr
 
 export function registerCatalogRoutes(app: FastifyInstance, svc: CatalogService) {
   app.get('/v1/catalog/home', async (req) => {
-    const q = parse(z.object({ lat: z.coerce.number().optional(), lng: z.coerce.number().optional() }), req.query ?? {});
+    const q = parse(
+      z.object({ lat: z.coerce.number().optional(), lng: z.coerce.number().optional() }),
+      req.query ?? {},
+    );
     return svc.home(req.auth?.userId ?? null, q);
   });
 
@@ -20,7 +23,7 @@ export function registerCatalogRoutes(app: FastifyInstance, svc: CatalogService)
 
   app.get<{ Params: { slug: string } }>('/v1/catalog/services/:slug', async (req) => {
     const s = await svc.getServiceBySlug(req.params.slug);
-    if (!s || !s.active) throw errors.notFound('Serviço');
+    if (!s?.active) throw errors.notFound('Serviço');
     return toServiceDto(s);
   });
 
