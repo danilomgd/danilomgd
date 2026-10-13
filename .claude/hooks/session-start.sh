@@ -16,3 +16,10 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export PATH=\"$(dirname "$BIN"):\$PATH\"" >> "$CLAUDE_ENV_FILE"
 fi
 echo "vectorcraft-cli pronto em $BIN"
+
+# REA: falha aqui nao derruba a sessao; o wrapper scripts/rea/mcp.sh tenta de novo ao conectar.
+if REA_BIN="$(bash "$ROOT/scripts/rea/ensure.sh")"; then
+  echo "rea pronto em $REA_BIN"
+else
+  echo "aviso: nao foi possivel preparar o rea-agents; o MCP tentara via npx ao conectar" >&2
+fi

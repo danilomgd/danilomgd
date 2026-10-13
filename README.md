@@ -280,3 +280,53 @@ e termina com `claude mcp list`. Para forçar a compilação em vez do download:
 Nada a fazer. O hook compila o `vectorcraft-cli` em `~/.vectorcraft/bin` na primeira sessão
 (o container é cacheado depois disso) e o `.mcp.json` sobe o servidor. Para fixar uma versão,
 defina `VECTORCRAFT_VERSION=v0.8.0` no ambiente.
+
+## REA: engenharia reversa (skill + MCP para o Claude Code)
+
+O projeto traz a skill `reverse-engineer-anything` e o servidor MCP do
+[REA](https://github.com/morluto/rea) (pacote npm `rea-agents`, MIT), que dá ao Claude
+170 ferramentas para inspecionar binários nativos, apps Electron/JavaScript, assemblies .NET,
+APKs, firmware, sites e capturas de rede, sempre com a evidência de cada conclusão. A análise
+roda localmente. Uso previsto: entender como uma funcionalidade de um app funciona e
+reconstruí-la em um projeto próprio, dentro do que a licença do alvo permitir.
+
+```
+.claude/skills/reverse-engineer-anything/   skill (SKILL.md + references/), copiada do pacote rea-agents@6.4.0
+scripts/rea/mcp.sh                          wrapper do .mcp.json: inicia `rea mcp` (fallback: npx -y rea-agents@6.4.0 mcp)
+scripts/rea/ensure.sh                       instala `rea-agents@6.4.0` globalmente via npm se faltar (idempotente)
+.claude/hooks/session-start.sh              hook SessionStart: roda o ensure.sh nas sessões na nuvem
+```
+
+Registro do servidor no `.mcp.json` (escopo project), ao lado do `vectorcraft`:
+
+```json
+"rea": {
+  "command": "bash",
+  "args": ["${CLAUDE_PROJECT_DIR:-.}/scripts/rea/mcp.sh"]
+}
+```
+
+Requisito: Node.js 22.19+ ou 24.11+ com npm. A análise estática de JavaScript, .NET e APK não
+precisa de mais nada. Para pseudocódigo de binários nativos é preciso Hopper, Ghidra ou IDA
+instalados e configurados (veja `docs/installation.md` no repositório do REA).
+
+### No Mac (uma vez)
+
+```bash
+npx rea-agents@6.4.0 setup --client claude_code
+```
+
+Revise o plano e aprove. Isso registra `npx -y rea-agents@6.4.0 mcp` no escopo user, instala a
+mesma skill em `~/.claude/skills` e, opcionalmente, o Hopper. Reinicie o Claude Code depois.
+Para atualizar: `npx rea-agents@latest setup` e, em seguida, atualize a versão fixada em
+`scripts/rea/ensure.sh`, `scripts/rea/mcp.sh` e a cópia da skill em `.claude/skills`.
+
+### Nas sessões Claude Code na nuvem (Linux)
+
+Com o registro acima no `.mcp.json`, nada mais a fazer. O hook instala o `rea` em
+`$(npm prefix -g)/bin` na primeira sessão (cerca de 5 s) e o `.mcp.json` sobe o servidor via
+`scripts/rea/mcp.sh`. Para testar à mão:
+
+```bash
+bash scripts/rea/ensure.sh && rea doctor --json
+```
