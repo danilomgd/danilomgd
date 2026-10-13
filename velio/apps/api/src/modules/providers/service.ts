@@ -150,7 +150,7 @@ export function createProvidersService(
 
     async onboard(userId: string, input: ProviderOnboardingInput): Promise<ProviderMe> {
       if (await findByUserId(userId)) throw errors.conflict('Cadastro de prestador já existe');
-      const documentHash = sha256(input.documentNumber);
+      const documentHash = sha256(input.documentNumber, ctx.cfg.DOCUMENT_HASH_KEY ?? ctx.cfg.JWT_SECRET);
       const [dup] = await db
         .select({ id: providers.id })
         .from(providers)

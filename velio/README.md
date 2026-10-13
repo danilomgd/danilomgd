@@ -62,6 +62,7 @@ pnpm test:scenarios                         # cenários A–L ponta a ponta (app
 | `PORT`, `HOST` | `4000`, `0.0.0.0` | |
 | `DATABASE_URL` | vazio (PGlite) | Obrigatório em produção |
 | `JWT_SECRET` | valor de desenvolvimento | Obrigatório trocar em produção (≥ 32 caracteres) |
+| `DOCUMENT_HASH_KEY` | vazio (usa `JWT_SECRET`) | Chave do HMAC de CPF/CNPJ dos prestadores; obrigatória em produção e nunca rotacionar sem migrar os hashes |
 | `PAYMENTS_PROVIDER` | `sandbox` | `pagarme` exige `PAGARME_SECRET_KEY` e `PAGARME_WEBHOOK_SECRET` |
 | `SMS_PROVIDER` | `log` | `twilio` em V1 |
 | `PUSH_PROVIDER` | `memory` | `expo` em V1 |

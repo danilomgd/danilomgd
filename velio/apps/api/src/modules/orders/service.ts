@@ -726,7 +726,8 @@ export function createOrdersService(
       ? await deps.providers.toPublic(await deps.providers.getById(o.providerId))
       : null;
     // O PIN é segredo do cliente: o prestador nunca o recebe pela API.
-    const showPin = viewer === null || viewer.type === 'customer' || viewer.type === 'operator';
+    // PIN de início só para quem o informa (cliente) ou para a operação; nunca para o prestador.
+    const showPin = viewer?.type === 'customer' || viewer?.type === 'operator';
     return {
       id: o.id,
       requestId: o.requestId,
@@ -811,7 +812,11 @@ export function createOrdersService(
   // ---------------------------------------------------------------------------------------------
   const terminal = [...TERMINAL_ORDER_STATUSES];
 
-  async function list(where: ReturnType<typeof and>, q: z.infer<typeof OrderListQuery>) {
+  async function list(
+    where: ReturnType<typeof and>,
+    q: z.infer<typeof OrderListQuery>,
+    viewer: OrderActor | null = null,
+  ) {
     const scope =
       q.scope === 'active'
         ? notInArray(serviceOrders.status, terminal)
@@ -826,7 +831,10 @@ export function createOrdersService(
       .orderBy(desc(serviceOrders.id))
       .limit(q.limit + 1);
     const p = page(rows, q.limit);
-    return { items: await Promise.all(p.items.map((o) => toDto(o))), nextCursor: p.nextCursor };
+    return {
+      items: await Promise.all(p.items.map((o) => toDto(o, viewer))),
+      nextCursor: p.nextCursor,
+    };
   }
 
   async function canUserAccessOrder(
@@ -1039,9 +1047,9 @@ export function createOrdersService(
     appendEvent: (orderId: string, e: Parameters<typeof appendEvent>[2]) => appendEvent(db, orderId, e),
 
     listForCustomer: (userId: string, q: z.infer<typeof OrderListQuery>) =>
-      list(eq(serviceOrders.customerId, userId), q),
+      list(eq(serviceOrders.customerId, userId), q, { type: 'customer', userId }),
     listForProvider: (providerId: string, q: z.infer<typeof OrderListQuery>) =>
-      list(eq(serviceOrders.providerId, providerId), q),
+      list(eq(serviceOrders.providerId, providerId), q, { type: 'provider', userId: null, providerId }),
 
     async setPaymentMethod(orderId: string, method: { id: string; kind: 'CARD' | 'PIX' | 'WALLET' }) {
       await patchMetadata(orderId, { paymentMethodId: method.id, paymentMethodKind: method.kind });
@@ -1295,7 +1303,10 @@ export function createOrdersService(
         .orderBy(desc(serviceOrders.id))
         .limit(q.limit + 1);
       const p = page(rows, q.limit);
-      return { items: await Promise.all(p.items.map((o) => toDto(o))), nextCursor: p.nextCursor };
+      return {
+        items: await Promise.all(p.items.map((o) => toDto(o, { type: 'operator', userId: null }))),
+        nextCursor: p.nextCursor,
+      };
     },
 
     /** Ordens cujo estado atual excedeu `slaSeconds` da definição. */

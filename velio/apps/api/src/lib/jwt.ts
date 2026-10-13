@@ -43,6 +43,7 @@ export function randomToken(bytes = 48): string {
   return randomBytes(bytes).toString('base64url');
 }
 
-export function sha256(input: string): string {
-  return createHmac('sha256', 'velio-hash').update(input).digest('hex');
+/** HMAC-SHA256 em hex. Para dados pessoais (ex.: CPF/CNPJ) passe uma chave secreta do ambiente. */
+export function sha256(input: string, key = 'velio-hash'): string {
+  return createHmac('sha256', key).update(input).digest('hex');
 }

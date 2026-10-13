@@ -93,6 +93,18 @@ Contagens feitas a partir do inventário de rotas, telas e testes; detalhe por r
 | `offer.expire` registrado mas não usado (fluxo usa `dispatch.wave_timeout`) | Baixo | Remover ou usar |
 | Fontes Inter/JetBrains não embutidas no app | Baixo | `expo-font` com arquivos OFL |
 | Testes de interface inexistentes (web e mobile) | Médio | Playwright no web (login, dispatch manual) e Detox/Maestro no mobile para os 3 fluxos críticos |
+| Pré-autorização de serviços RANGE usa o mínimo da faixa; o benchmark (02 §4.2) recomenda o teto | Médio: captura final pode exceder a autorização e falhar | Pré-autorizar pelo `maxCents` da faixa e capturar o valor final menor |
+| Remuneração exibida na oferta ao prestador é 80 % fixo do preço, não a regra de comissão aplicável | Baixo: valor informado pode divergir do repasse real | Calcular com `pickCommissionRule` + `settle` ao montar `DispatchOffer.summary` |
+| Upsert de `commission_rules` não encerra a regra anterior (`activeUntil`) | Médio: duas regras vigentes para o mesmo escopo | Ao criar regra para o mesmo escopo, fechar a anterior na transação |
+| `addresses.lat/lng` armazenados como `text` | Baixo: cast em consultas e sem índice numérico | Migração aditiva para `double precision` (como já é em `service_orders` e `providers`) |
+| `dashboard()` diverge em detalhes das definições de `DashboardMetrics` (ex.: janela do repeat rate) | Baixo | Alinhar SQL às definições de `16_ANALYTICS.md` |
+| `packages/api-client` não expõe cerca de 12 rotas que a API registra (ex.: regiões, tickets, concierge via ops) | Baixo: apps não acessam essas rotas | Completar o cliente tipado a partir de `08_API_SPECIFICATION.md` |
+| Avaliação com nota ≤ 2 não abre ticket nem retém repasse automaticamente | Médio para confiança | Efeito `support.flagLowRating` na transição `customer.review` |
+| Estado `CANCELLED_NO_SHOW` previsto no PRD não existe na engine | Baixo | Cobrir como `CANCELLED_BY_PLATFORM` com motivo, ou adicionar o estado na definição |
+| Seed publica serviços e planos que o PRD deixa fora do MVP (ex.: entregas, dedetização) | Baixo | Desativar via `active=false` no admin antes do lançamento; o catálogo é dado, não código |
+| Nomes de eventos de analytics no PRD §10 divergem do enum em `contracts` (ex.: `start_matching` → `service_request_started`) | Baixo | Corrigir o PRD para o enum, que é a fonte de verdade |
+
+Correções já aplicadas após a revisão cruzada código × documentação: PIN de início não é mais exposto ao prestador em nenhuma listagem; hash do CPF/CNPJ usa chave secreta do ambiente (`DOCUMENT_HASH_KEY`, obrigatória em produção); a carteira não é liquidada quando nenhuma captura ocorreu; PIX pago antes do matching é reembolsado integralmente em cancelamento sem taxa; `PAGARME_SECRET_KEY` e `PAGARME_WEBHOOK_SECRET` passam a ser obrigatórios em produção com o provedor Pagar.me; ADR-008 corrigido para scrypt.
 | Sem teste de carga | Médio | k6 para criação de pedido e aceite concorrente (`18_TEST_PLAN.md`) |
 
 ## 6. 🔴 Ausente (consciente, fora do MVP)

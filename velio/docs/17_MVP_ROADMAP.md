@@ -1,6 +1,6 @@
 # 17 — Roadmap: MVP, V1, V2, V3
 
-Baseado no que já existe em código (`packages/contracts`, `packages/domain`, schema Drizzle, adaptadores, outbox, scheduler, cliente tipado) e no `03_PRODUCT_REQUIREMENTS_DOCUMENT.md §12–14`. "Fundação pronta" = domínio, contratos e schema já suportam; "Módulo" = orquestração em `apps/api/src/modules/*` (em implementação); "UI" = telas em `apps/mobile`/`apps/web`.
+Baseado no que já existe em código (`packages/contracts`, `packages/domain`, schema Drizzle, adaptadores, outbox, scheduler, cliente tipado, os 17 módulos em `apps/api/src/modules/*`, o harness e os cenários A–D em `apps/api/test`) e no `03_PRODUCT_REQUIREMENTS_DOCUMENT.md §12–14`. "Fundação pronta" = domínio, contratos, schema e módulo da API já suportam; "UI" = telas em `apps/mobile`/`apps/web` (em construção). Lacunas pontuais dos módulos estão listadas em `18_TEST_PLAN.md §8`.
 
 ## 1. Escopo por release e funcionalidade
 
@@ -18,17 +18,17 @@ Critério de pronto (DoD) comum a toda linha marcada MVP: caminho UI → API →
 | Catálogo | Busca textual | X (ILIKE) | X (pg_trgm) | | | `search_text` | Resultados < 300 ms |
 | Catálogo | Textos de notificação administráveis | | | X | | — | |
 | Cliente | Endereços, veículos, equipamentos | X | | | | pronta (`assets.ts`) | Equipamento alimenta `equipment_due` |
-| Pedido | `IMMEDIATE` (encanador, eletricista, pequenos reparos, chaveiro) | X | | | | pronta (`immediateWorkflow`) | Cenário A verde (18 §4) |
-| Pedido | `SCHEDULED` com lembretes 24 h/1 h e matching 6 h antes | X | | | | pronta (`scheduledWorkflow`, `reminderTimes`, `scheduledMatchingStart`) | Cenário B |
-| Pedido | Orçamento adicional em `IN_PROGRESS` com aprovação explícita | X | | | | pronta (`quotes`, `noOpenAdditionalQuote`) | Nenhuma intent `ADDITIONAL` sem `APPROVED` |
-| Pedido | `QUOTE` (visita técnica, orçamento inicial) | | X | | | pronta (`quoteWorkflow`) | Cenário C |
-| Pedido | `LOGISTICS` leva e traz com custódia e handover de veículo | | X | | | pronta (`logisticsWorkflow`, `custody_events`, `vehicle_handovers`) | Cenário E |
-| Pedido | `LAUNDRY` com QR por saco | | X | | | pronta (`laundryWorkflow`, `requiresCustody`) | Cenário F |
-| Pedido | `CONCIERGE` com `RuleBasedPlanner` → `NEEDS_HUMAN` | X (triagem humana) | | | | pronta (`conciergeWorkflow`, `RuleBasedPlanner`) | Todo pedido cai em operador; sem ordens filhas automáticas |
-| Pedido | `CONCIERGE` com IA (`ClaudePlanner`), ordens filhas automáticas | | X | | | pronta (`ClaudePlanner`, `needsHumanReview`, `order_tasks`) | Cenário G; IA nunca cria pagamento |
+| Pedido | `IMMEDIATE` (encanador, eletricista, pequenos reparos, chaveiro) | X | | | | pronta (`immediateWorkflow`, módulo `orders`) | Cenário A **verde** (18 §4) |
+| Pedido | `SCHEDULED` com lembretes 24 h/1 h e matching 6 h antes | X | | | | pronta (`scheduledWorkflow`, `booking.remind`, `scheduledMatchingStart`) | Cenário B **verde** |
+| Pedido | Orçamento adicional em `IN_PROGRESS` com aprovação explícita | X | | | | pronta (`quotes/service.ts`, `noOpenAdditionalQuote`) | Cenário F a criar; nenhuma intent `ADDITIONAL` sem `APPROVED` |
+| Pedido | `QUOTE` (visita técnica, orçamento inicial) | | X | | | pronta (`quoteWorkflow`, `quotes`) | Cenário E a criar |
+| Pedido | `LOGISTICS` leva e traz com custódia e handover de veículo | | X | | | pronta (`logisticsWorkflow`, `custodyScan`, `vehicleHandover`) | Cenário G a criar |
+| Pedido | `LAUNDRY` com QR por saco | | X | | | pronta (`laundryWorkflow`, `requiresCustody`) | Cenário D **verde** |
+| Pedido | `CONCIERGE` com `RuleBasedPlanner` → `NEEDS_HUMAN` | X (triagem humana) | | | | pronta (`conciergeWorkflow`, `RuleBasedPlanner`, `concierge/service.ts`) | Pedidos de padrão conhecido podem sair direto em `PLAN_PROPOSED`; admin pode forçar humano com `humanReviewAboveCents = 0` |
+| Pedido | `CONCIERGE` com IA (`ClaudePlanner`), ordens filhas automáticas | | X | | | pronta (`ClaudePlanner`, `needsHumanReview`, `spawnChildren`) | Cenário H a criar; IA nunca cria pagamento |
 | Pedido | Workflows sobrescritos no banco (`workflow_definitions`) | | | X | | pronta (`registerWorkflow`, tabela) | Validação `validateDefinition` no upload |
 | Pedido | Reagendamento pelo cliente | | X | | | `bookings` | Sem recriar ordem |
-| Matching | Score ponderado, ondas, `minScore`, fallback ops, auditoria | X | | | | pronta (`score.ts`, `waves.ts`, `dispatch.ts`) | Cenário I; `score_breakdown` em toda oferta |
+| Matching | Score ponderado, ondas, `minScore`, fallback ops, auditoria | X | | | | pronta (`score.ts`, `waves.ts`, `dispatch/service.ts`) | Cenário J a criar; `score_breakdown` em toda oferta (A verifica 3 ofertas e aceite concorrente) |
 | Matching | Pesos/ondas por categoria no admin | X | | | | pronta (`matching_configs`) | Sem deploy |
 | Matching | Surge automático por demanda, taxa de deslocamento | | X | | | `surge_multiplier_bps` | Teto público |
 | Matching | Níveis de prestador, lista de ordens disponíveis | | X | | | `provider_stats` | |
@@ -39,18 +39,18 @@ Critério de pronto (DoD) comum a toda linha marcada MVP: caminho UI → API →
 | Execução | Localização em tempo real (`LocationPolicy`, `acceptPing`) | X | | | | pronta | Só sala da ordem em `liveLocation` |
 | Execução | Chat por ordem com mensagens de sistema, mascarado | X | | | | pronta (`communication.ts`) | Fecha 48 h após conclusão |
 | Execução | Ligação mascarada | | X | | | — | Provedor de telefonia |
-| Pagamento | Cartão tokenizado (pré-autorização → captura), PIX com QR, sandbox determinístico | X | | | | pronta (`PaymentGateway`, `SandboxGateway`, `PagarmeGateway`) | Cenário A/P-01..P-08; homologação 13 §16 antes de produção |
-| Pagamento | Taxa de cancelamento por fase, reembolso forma original | X | | | | pronta (`customerCancellation`) | Exibido = debitado |
-| Pagamento | Ledger dupla entrada, comissão por regra, repasse semanal (CSV manual) | X | | | | pronta (`settle`, `pickCommissionRule`, `ledger_entries`, `payouts`) | Journals balanceados; lote na quarta |
+| Pagamento | Cartão tokenizado (pré-autorização → captura), PIX antecipado com QR e timeout de 15 min, sandbox determinístico | X | | | | pronta (`PaymentGateway`, `payments/service.ts`) | A **verde**; K a criar; homologação 13 §16 antes de produção; corrigir riscos 13 §17 (settle com captura falha; reembolso de PIX em cancelamento) |
+| Pagamento | Taxa de cancelamento por fase, reembolso forma original | X | | | | pronta (`customerCancellation`, `chargeCancellationFee`) | Cenário I a criar; exibido = debitado |
+| Pagamento | Ledger dupla entrada, comissão por regra, repasse semanal (lote `payout.batch`, pagamento manual) | X | | | | pronta (`wallet/service.ts`) | Journals balanceados (exceto `dispute_*`); lote na quarta 03:00 UTC |
 | Pagamento | Cupons | X | | | | pronta (`coupons`, `couponDiscount`) | `BEMVINDO10` |
 | Pagamento | Carteira do cliente (crédito em reembolso), crédito promocional | | X | | | pronta (`wallet_accounts`, `promotions`) | |
 | Pagamento | Split nativo no provedor / transferência automática de repasse | | X | | | `payouts.gateway_ref` | Parecer contábil |
 | Pagamento | Chargeback automatizado, antifraude com dados completos | | X | | | `customer_risk_signals` | |
 | Pagamento | Nota fiscal da comissão, gorjeta | | X | | | — | |
-| Assinatura | Planos Essencial/Residencial/Premium, cobrança recorrente, geração de visitas | | X (cedo) | | | pronta (`subscriptions.ts`, `nextVisitDue`, seed de planos) | Cenário L; no MVP ar-condicionado só avulso (PRD §12) |
-| Reputação | Avaliação bilateral pós-conclusão, média por recência, `provider_stats` | X | | | | pronta (`recencyWeightedRating`, `reviews`) | Uma por lado; janela 7 d |
-| Reputação | Ticket automático e hold para nota ≤ 2 | X | | | | parcial (sem efeito declarado; conforme contrato) | Implementar no handler de `customer.review` |
-| Suporte | Tickets, disputas com matriz e reembolso, incidentes | X | | | | pronta (`support.ts`) | Cenário K |
+| Assinatura | Planos Essencial/Residencial/Premium, cobrança recorrente, geração de visitas | | X (cedo) | | | pronta (`subscriptions/service.ts`) | Cenário C **verde**; no MVP ar-condicionado só avulso (PRD §12): admin desativa planos no piloto; retentativas de cobrança a implementar |
+| Reputação | Avaliação bilateral pós-conclusão, média por recência, `provider_stats` | X | | | | pronta (`reputation/service.ts`) | Uma por lado (A verifica 409); janela de 7 d a implementar |
+| Reputação | Ticket automático e hold para nota ≤ 2 | X | | | | não implementado | Implementar em `createReview` |
+| Suporte | Tickets, disputas com matriz e reembolso, incidentes | X | | | | pronta (`support/service.ts`) | Cenário L a criar |
 | Suporte | Fundo de garantia / seguro para custódia | | X | | | — | Regras públicas |
 | Prestador | Onboarding com documentos, aprovação manual, disponibilidade, agenda, folgas | X | | | | pronta (`providers.ts`) | Checklist 15 §8 |
 | Prestador | Indicadores, carteira, extrato, repasses | X | | | | pronta | |
@@ -101,8 +101,8 @@ Justificativas: São Paulo concentra demanda e oferta de MEI; três categorias d
 
 | Marco | Entregas | Depende de | Semana (estimativa) |
 |---|---|---|---|
-| M0 Fundações | Monorepo, contracts, domain testado, schema + migração 0000, adaptadores, outbox/scheduler, app skeleton (**feito**) | — | 0 |
-| M1 API núcleo | Módulos identity, catalog, assets, providers, orders (engine + transições), dispatch, payments (sandbox), wallet, communication, reputation, support, ops, admin, analytics; cenários A, B, D, H, I, K verdes | M0 | 1–6 |
+| M0 Fundações | Monorepo, contracts, domain testado, schema + migração 0000, adaptadores, outbox/scheduler (**feito**) | — | 0 |
+| M1 API núcleo | 17 módulos registrados (`registry.ts`), efeitos, jobs, harness e cenários A–D (**feito**); restam cenários E–L, testes de segurança S-01..S-18, correções de 18 §8 (PIN em `/providers/me/orders`, settle condicionado à captura, reembolso de PIX em cancelamento, webhook secret obrigatório, `document_hash` com segredo) | M0 | 1–6 |
 | M2 Apps | VÉLIO (cliente): onboarding, home, pedido, acompanhamento, pagamento, chat, avaliação; VÉLIO Pro: onboarding, ofertas, execução (PIN, fotos), carteira; web `/ops` e `/admin` | M1 (contratos estáveis) | 4–10 (paralelo a M1 a partir da semana 4) |
 | M3 Homologação de pagamento | Pagar.me sandbox do provedor (13 §16), webhook assinado obrigatório, repasse CSV | M1 | 7–9 |
 | M4 Segurança e LGPD | Checklist 14 §13, política de privacidade, DPO, RIPD, redação de logs, serializadores por papel testados | M1 | 8–10 |

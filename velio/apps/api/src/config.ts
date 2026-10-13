@@ -20,6 +20,8 @@ const Env = z.object({
   PAYMENTS_PROVIDER: z.enum(['sandbox', 'pagarme']).default('sandbox'),
   PAGARME_SECRET_KEY: z.string().optional(),
   PAGARME_WEBHOOK_SECRET: z.string().optional(),
+  /** Chave do HMAC de documentos (CPF/CNPJ). Obrigatória em produção. */
+  DOCUMENT_HASH_KEY: z.string().min(16).optional(),
   SMS_PROVIDER: z.enum(['log', 'twilio']).default('log'),
   PUSH_PROVIDER: z.enum(['memory', 'expo']).default('memory'),
   CONCIERGE_PLANNER: z.enum(['rules', 'claude']).default('rules'),
@@ -42,6 +44,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (!cfg.DATABASE_URL) problems.push('DATABASE_URL obrigatório');
     if (cfg.JWT_SECRET.startsWith('dev-only')) problems.push('JWT_SECRET de desenvolvimento');
     if (cfg.PAYMENTS_PROVIDER === 'sandbox') problems.push('PAYMENTS_PROVIDER=sandbox');
+    if (cfg.PAYMENTS_PROVIDER === 'pagarme' && !cfg.PAGARME_SECRET_KEY)
+      problems.push('PAGARME_SECRET_KEY ausente');
+    if (cfg.PAYMENTS_PROVIDER === 'pagarme' && !cfg.PAGARME_WEBHOOK_SECRET)
+      problems.push('PAGARME_WEBHOOK_SECRET ausente (webhooks sem assinatura)');
+    if (!cfg.DOCUMENT_HASH_KEY) problems.push('DOCUMENT_HASH_KEY ausente');
     if (cfg.SMS_PROVIDER === 'log') problems.push('SMS_PROVIDER=log');
     if (cfg.PUSH_PROVIDER === 'memory') problems.push('PUSH_PROVIDER=memory');
     if (problems.length) throw new Error(`Configuração inválida para produção: ${problems.join('; ')}`);

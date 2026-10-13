@@ -64,7 +64,7 @@ Formato: contexto, decisão, consequências. Numeração estável; decisões rev
 
 ## ADR-008 — Autenticação: OTP por telefone para cliente e prestador; e-mail e senha para operação
 
-**Decisão.** Telefone + código OTP (porta `SmsSender`; adaptador de desenvolvimento registra o código no log e o devolve apenas em `NODE_ENV=test`). Operadores e administradores: e-mail + senha com Argon2id e segundo fator opcional em V1. Tokens JWT de acesso curtos (15 min) e refresh rotativo (30 dias) guardados com hash. Papéis: `customer`, `provider`, `operator`, `admin`. Um mesmo usuário pode ter perfil de cliente e de prestador.
+**Decisão.** Telefone + código OTP (porta `SmsSender`; adaptador de desenvolvimento registra o código no log e o devolve apenas em `NODE_ENV=test`). Operadores e administradores: e-mail + senha com scrypt (`node:crypto`, sem dependência nativa; parâmetros N=2^15, r=8, p=1) e segundo fator opcional em V1. Tokens JWT de acesso curtos (15 min) e refresh rotativo (30 dias) guardados com hash. Papéis: `customer`, `provider`, `operator`, `admin`. Um mesmo usuário pode ter perfil de cliente e de prestador.
 
 ## ADR-009 — Realtime com Socket.IO no mesmo processo; outbox de eventos
 

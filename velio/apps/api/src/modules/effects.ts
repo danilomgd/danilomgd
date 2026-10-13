@@ -125,6 +125,10 @@ export function buildEffects(ctx: AppContext, d: EffectDeps): EffectExecutor {
         }
         return;
       }
+      if (d.payments.isChargeNeeded(c.order) && (await d.payments.capturedCents(c.order.id)) === 0) {
+        ctx.log.warn({ orderId: c.order.id }, 'liquidação adiada: nenhuma captura para a ordem');
+        return;
+      }
       const s = await d.wallet.settleOrder({
         orderId: c.order.id,
         providerId: c.order.providerId,

@@ -523,6 +523,19 @@ export function createPaymentsService(
     },
 
     /** Efeito payments.capture: captura INITIAL + ADDITIONAL autorizadas. Falha vira incidente para ops. */
+    /** Ordem exige cobrança própria (não coberta por plano nem faturada pelo pai)? */
+    isChargeNeeded(order: OrderRow): boolean {
+      return chargeNeeded(order);
+    },
+
+    /** Soma capturada (líquida de reembolsos) das intenções INITIAL/ADDITIONAL da ordem. */
+    async capturedCents(orderId: string): Promise<number> {
+      const intents = await intentsForOrder(db, orderId);
+      return intents
+        .filter((i) => i.kind === 'INITIAL' || i.kind === 'ADDITIONAL')
+        .reduce((sum, i) => sum + Math.max(0, i.capturedCents - i.refundedCents), 0);
+    },
+
     async capture(order: OrderRow): Promise<void> {
       const l = L();
       if (!chargeNeeded(order)) return;
@@ -600,6 +613,22 @@ export function createPaymentsService(
       for (const i of intents) {
         if (i.status === 'AUTHORIZED' && i.methodKind === 'CARD' && i.gatewayRef)
           await gateway.cancelAuthorization({ gatewayRef: i.gatewayRef });
+        if (i.status === 'AUTHORIZED' && i.methodKind === 'PIX' && i.gatewayRef) {
+          // PIX pago antes do matching: cancelamento sem taxa devolve o valor integral.
+          const r = await gateway.refund({ gatewayRef: i.gatewayRef, amountCents: i.amountCents });
+          if (r.ok) {
+            await updateIntent(db, i.id, { status: 'REFUNDED', refundedCents: i.amountCents });
+            continue;
+          }
+          await late?.support.createIncident({
+            orderId: order.id,
+            kind: 'PAYMENT',
+            severity: 'HIGH',
+            title: 'Falha ao reembolsar PIX em cancelamento',
+            details: { intentId: i.id, code: r.code, message: r.message },
+          });
+          continue;
+        }
         if (i.status === 'AUTHORIZED' || i.status === 'REQUIRES_ACTION')
           await updateIntent(db, i.id, { status: 'CANCELLED' });
       }
