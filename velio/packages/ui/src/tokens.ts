@@ -1,5 +1,5 @@
 /**
- * Tokens do design system "Aura" do VÉLIO. Fonte única para React Native e web.
+ * Tokens do design system "Trilho" do VÉLIO. Fonte única para React Native e web.
  * Paleta própria: um azul-petróleo profundo como primária (confiança, serviço técnico),
  * neutros quentes (premium, calmo) e um âmbar discreto como acento de ação secundária.
  */

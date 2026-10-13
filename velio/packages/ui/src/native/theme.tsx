@@ -49,7 +49,7 @@ export interface ThemeProviderProps {
   children: ReactNode;
 }
 
-/** Fornece o tema Aura (claro/escuro). `scheme="system"` segue a preferência do aparelho. */
+/** Fornece o tema Trilho (claro/escuro). `scheme="system"` segue a preferência do aparelho. */
 export function ThemeProvider({ scheme = 'system', children }: ThemeProviderProps) {
   const system = useColorScheme();
   const resolved: ColorScheme = scheme === 'system' ? (system === 'dark' ? 'dark' : 'light') : scheme;
