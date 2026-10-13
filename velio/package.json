@@ -1,0 +1,36 @@
+{
+  "name": "velio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "VÉLIO — super app brasileiro de serviços sob demanda (monorepo)",
+  "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:scenarios": "pnpm --filter @velio/api test:scenarios",
+    "db:generate": "pnpm --filter @velio/api db:generate",
+    "db:migrate": "pnpm --filter @velio/api db:migrate",
+    "db:seed": "pnpm --filter @velio/api db:seed",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "turbo": "^2.11.7",
+    "typescript": "~5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@biomejs/biome",
+      "turbo",
+      "@electric-sql/pglite"
+    ]
+  }
+}

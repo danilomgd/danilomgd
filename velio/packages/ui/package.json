@@ -1,0 +1,46 @@
+{
+  "name": "@velio/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Design system do VÉLIO: tokens compartilhados (RN e web) e componentes.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens.ts",
+    "./native": "./src/native/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "build": "echo 'source package, nothing to build'"
+  },
+  "peerDependencies": {
+    "@expo/vector-icons": "*",
+    "expo-image-picker": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "peerDependenciesMeta": {
+    "@expo/vector-icons": {
+      "optional": true
+    },
+    "expo-image-picker": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "@types/react": "~19.2.17",
+    "expo": "~57.0.28",
+    "expo-image-picker": "~57.0.20",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.4"
+  },
+  "dependencies": {
+    "@velio/contracts": "workspace:*"
+  }
+}

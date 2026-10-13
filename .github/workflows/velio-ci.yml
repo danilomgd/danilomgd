@@ -1,0 +1,41 @@
+name: velio-ci
+
+# Roda apenas em pull requests prontos para revisão (não em rascunhos) e na branch padrão,
+# para não gerar runs vermelhos e e-mails a cada checkpoint de trabalho em andamento.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['velio/**', '.github/workflows/velio-ci.yml']
+  push:
+    branches: [claude/higgsfie-api-connection-wshc0x, main]
+    paths: ['velio/**', '.github/workflows/velio-ci.yml']
+
+concurrency:
+  group: velio-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: velio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: velio/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
