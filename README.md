@@ -280,3 +280,69 @@ e termina com `claude mcp list`. Para forçar a compilação em vez do download:
 Nada a fazer. O hook compila o `vectorcraft-cli` em `~/.vectorcraft/bin` na primeira sessão
 (o container é cacheado depois disso) e o `.mcp.json` sobe o servidor. Para fixar uma versão,
 defina `VECTORCRAFT_VERSION=v0.8.0` no ambiente.
+
+## Skill motionmaxxing (vídeos de motion graphics com Claude Code)
+
+Skill de terceiro: https://github.com/Tejashmakwana/motionmaxxing (Apache-2.0).
+Faz filmes de lançamento, promos de produto, stings de marca e kinetic type a
+partir de HTML + GSAP, renderiza localmente com Chrome + ffmpeg e audita o
+próprio resultado com scripts (`look.py`, `lint.mjs`). Não precisa de API de
+vídeo: tudo roda na máquina.
+
+### Como usar
+
+No Claude Code, depois da instalação, basta pedir em linguagem natural ou
+chamar a skill:
+
+```
+/motionmaxxing faça um vídeo de lançamento de 20 segundos para https://exemplo.com.br.
+Quero ver a ideia e o storyboard antes de você começar a produção. Faça tudo em pt-br
+e salve o vídeo na pasta film/.
+```
+
+Saída: `film/final.mp4`, `film/index.html` (fonte editável), `film/STORYBOARD.md`
+e `film/NOTE.md` (números dos gates G0 a G5). As pastas `film/`, `brand/`,
+`look/` já estão no `.gitignore`.
+
+### Instalação no seu computador (Mac ou Windows com WSL)
+
+Requisitos: Node 22+, Python 3.9+, ffmpeg, Google Chrome.
+
+```bash
+git clone https://github.com/Tejashmakwana/motionmaxxing ~/.claude/skills/motionmaxxing
+bash ~/.claude/skills/motionmaxxing/install.sh   # só confere requisitos, não instala nada
+```
+
+Opcional: `export ELEVENLABS_API_KEY=...` para locução, trilha e efeitos.
+Sem a chave, os filmes saem mudos.
+
+### Sessões Claude Code na nuvem (este repositório)
+
+O container é recriado a cada sessão, então a instalação global some. O script
+`scripts/motionmaxxing/ensure-linux.sh` clona a skill em `~/.claude/skills` e
+devolve o caminho de `scripts/motionmaxxing/chrome-nosandbox.sh`, um wrapper
+do Chromium com `--no-sandbox` (obrigatório porque o container roda como root).
+
+Para rodar isso automaticamente, acrescente ao final de
+`.claude/hooks/session-start.sh`:
+
+```bash
+# motionmaxxing: falha aqui nao derruba o hook
+if CHROME="$(bash "$ROOT/scripts/motionmaxxing/ensure-linux.sh" 2>/dev/null)"; then
+  if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    echo "export CHROME_PATH=\"$CHROME\"" >> "$CLAUDE_ENV_FILE"
+  fi
+  echo "motionmaxxing pronta (CHROME_PATH=$CHROME)"
+fi
+```
+
+Ou, manualmente dentro de uma sessão:
+
+```bash
+export CHROME_PATH="$(bash scripts/motionmaxxing/ensure-linux.sh)"
+```
+
+Limitação da nuvem: a captura de marca por URL (`brand.mjs`) só alcança
+domínios liberados na política de rede do ambiente. Se um site der
+`ERR_TUNNEL_CONNECTION_FAILED`, adicione o domínio em Allowed domains nas
+configurações do ambiente (menu do ambiente na barra de título, depois Edit).

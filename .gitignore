@@ -25,6 +25,15 @@ downloads/
 *.mp3
 *.wav
 
+# Saidas da skill motionmaxxing (videos, capturas de marca, gates)
+film/
+brand/
+look/
+look-*/
+review/
+stills/
+draft*.mp4
+
 # Sistema
 .DS_Store
 Thumbs.db
