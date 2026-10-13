@@ -1,0 +1,23 @@
+{
+  "name": "@velio/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Contratos compartilhados do VÉLIO: enums canônicos, DTOs Zod, rótulos pt-BR, eventos realtime e analytics.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "build": "echo 'source package, nothing to build'"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@velio/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Marketplace Engine do VÉLIO: regras puras, sem I/O. Workflows, matching, precificação, políticas.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "echo 'source package, nothing to build'"
+  },
+  "dependencies": {
+    "@velio/contracts": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.turbo/
+.next/
+.expo/
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.pglite/
+apps/api/drizzle/meta/_journal.json.bak

@@ -1,3 +1,12 @@
+# Repositório
+
+Dois projetos independentes vivem aqui:
+
+- **[`velio/`](velio/)**: VÉLIO, super app brasileiro de serviços sob demanda (monorepo TypeScript: API, apps mobile, painéis web, documentação). Comece por [`velio/README.md`](velio/README.md) e [`velio/docs/`](velio/docs/).
+- **Raiz**: integração com a API da Higgsfield e servidores MCP auxiliares, descritos abaixo.
+
+---
+
 # Integração Higgsfield via chave de API
 
 Conexão direta com a Higgsfield API usando chave e segredo próprios, sem

@@ -1,0 +1,43 @@
+{
+  "name": "@velio/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API do VÉLIO: modular monolith em Fastify com Drizzle (Postgres/PGlite), Socket.IO e scheduler.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:scenarios": "vitest run test/scenarios",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@electric-sql/pglite": "^0.5.9",
+    "@fastify/cors": "^11.3.1",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/sensible": "^6.0.7",
+    "@velio/contracts": "workspace:*",
+    "@velio/domain": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.5",
+    "pino": "^10.4.0",
+    "postgres": "^3.4.9",
+    "socket.io": "^4.8.4",
+    "uuid": "^14.0.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
+    "socket.io-client": "^4.8.4",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.4"
+  }
+}
