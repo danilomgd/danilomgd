@@ -1,9 +1,13 @@
 name: velio-ci
 
+# Roda apenas em pull requests prontos para revisão (não em rascunhos) e na branch padrão,
+# para não gerar runs vermelhos e e-mails a cada checkpoint de trabalho em andamento.
 on:
-  push:
-    paths: ['velio/**', '.github/workflows/velio-ci.yml']
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['velio/**', '.github/workflows/velio-ci.yml']
+  push:
+    branches: [claude/higgsfie-api-connection-wshc0x, main]
     paths: ['velio/**', '.github/workflows/velio-ci.yml']
 
 concurrency:
@@ -12,6 +16,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
