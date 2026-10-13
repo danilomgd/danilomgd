@@ -60,7 +60,7 @@ export const lightTheme = {
   overlay: 'rgba(11, 30, 38, 0.45)',
 } as const;
 
-export const darkTheme: typeof lightTheme = {
+export const darkTheme: Theme = {
   bg: palette.petrol[900],
   surface: palette.petrol[800],
   surfaceAlt: palette.petrol[700],
@@ -84,7 +84,7 @@ export const darkTheme: typeof lightTheme = {
   overlay: 'rgba(0, 0, 0, 0.6)',
 };
 
-export type Theme = typeof lightTheme;
+export type Theme = Record<keyof typeof lightTheme, string>;
 
 export const spacing = {
   0: 0,

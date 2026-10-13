@@ -13,7 +13,15 @@ export function EmptyState({ title, description, action, compact }: EmptyStatePr
   return (
     <div className={[s.empty, compact ? s.emptyCompact : ''].join(' ')}>
       <div className={s.emptyIcon} aria-hidden>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          aria-hidden="true"
+        >
           <rect x="4" y="5" width="16" height="14" rx="3" />
           <path d="M8 10h8M8 14h5" strokeLinecap="round" />
         </svg>
@@ -34,11 +42,25 @@ export interface ErrorStateProps {
 }
 
 /** Erro de rede/servidor com botão de tentar de novo. */
-export function ErrorState({ title = 'Não foi possível carregar', message, onRetry, retrying, compact }: ErrorStateProps) {
+export function ErrorState({
+  title = 'Não foi possível carregar',
+  message,
+  onRetry,
+  retrying,
+  compact,
+}: ErrorStateProps) {
   return (
     <div className={[s.empty, compact ? s.emptyCompact : ''].join(' ')} role="alert">
       <div className={[s.emptyIcon, s.emptyIconDanger].join(' ')} aria-hidden>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          aria-hidden="true"
+        >
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 8v4.5M12 15.5v.5" strokeLinecap="round" />
         </svg>
@@ -65,7 +87,9 @@ export function InlineAlert({
   children: ReactNode;
   action?: ReactNode;
 }) {
-  const cls = { danger: s.alertDanger, warning: s.alertWarning, info: s.alertInfo, success: s.alertSuccess }[tone];
+  const cls = { danger: s.alertDanger, warning: s.alertWarning, info: s.alertInfo, success: s.alertSuccess }[
+    tone
+  ];
   return (
     <div className={[s.alert, cls].join(' ')} role={tone === 'danger' ? 'alert' : 'status'}>
       <span>{children}</span>

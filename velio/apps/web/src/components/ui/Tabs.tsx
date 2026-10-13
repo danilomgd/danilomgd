@@ -16,9 +16,19 @@ export interface TabsProps<K extends string> {
   ariaLabel: string;
 }
 
-export function Tabs<K extends string>({ items, value, onChange, variant = 'line', ariaLabel }: TabsProps<K>) {
+export function Tabs<K extends string>({
+  items,
+  value,
+  onChange,
+  variant = 'line',
+  ariaLabel,
+}: TabsProps<K>) {
   return (
-    <div className={[s.tabs, variant === 'pills' ? s.tabsPills : ''].join(' ')} role="tablist" aria-label={ariaLabel}>
+    <div
+      className={[s.tabs, variant === 'pills' ? s.tabsPills : ''].join(' ')}
+      role="tablist"
+      aria-label={ariaLabel}
+    >
       {items.map((it) => {
         const active = it.key === value;
         return (

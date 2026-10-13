@@ -83,7 +83,8 @@ export const api = createApi(http);
 
 let realtime: RealtimeClient | null = null;
 export function getRealtime(): RealtimeClient {
-  if (!realtime) realtime = new RealtimeClient({ baseUrl: API_URL, getAccessToken: () => tokenStore.getAccessToken() });
+  if (!realtime)
+    realtime = new RealtimeClient({ baseUrl: API_URL, getAccessToken: () => tokenStore.getAccessToken() });
   return realtime;
 }
 export function resetRealtime() {

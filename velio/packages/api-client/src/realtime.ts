@@ -1,6 +1,9 @@
 import type { RealtimeEventName, RealtimePayload } from '@velio/contracts';
 import { io, type Socket } from 'socket.io-client';
 
+// biome-ignore lint/suspicious/noExplicitAny: assinatura exigida pelo socket.io-client
+type Listener = (...args: any[]) => void;
+
 export interface RealtimeOptions {
   baseUrl: string;
   getAccessToken: () => Promise<string | null> | string | null;
@@ -29,10 +32,13 @@ export class RealtimeClient {
   }
 
   on<K extends RealtimeEventName>(event: K, handler: (p: RealtimePayload<K>) => void): () => void {
-    const s = this.socket;
+    const s = this.socket as unknown as {
+      on(e: string, h: Listener): void;
+      off(e: string, h: Listener): void;
+    } | null;
     if (!s) throw new Error('connect() antes de on()');
-    s.on(event, handler as (...args: unknown[]) => void);
-    return () => s.off(event, handler as (...args: unknown[]) => void);
+    s.on(event, handler as Listener);
+    return () => s.off(event, handler as Listener);
   }
 
   subscribeOrder(orderId: string) {

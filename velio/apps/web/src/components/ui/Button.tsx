@@ -36,7 +36,13 @@ export function Button({
     .filter(Boolean)
     .join(' ');
   return (
-    <button type={type} className={cls} disabled={disabled || loading} aria-busy={loading || undefined} {...rest}>
+    <button
+      type={type}
+      className={cls}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
       {loading ? <span className={s.spinner} aria-hidden /> : null}
       {icon ? <span aria-hidden>{icon}</span> : null}
       <span>{children}</span>
@@ -45,5 +51,5 @@ export function Button({
 }
 
 export function Spinner({ className }: { className?: string }) {
-  return <span className={[s.spinner, className ?? ''].join(' ')} aria-label="Carregando" />;
+  return <span className={[s.spinner, className ?? ''].join(' ')} role="status" aria-label="Carregando" />;
 }

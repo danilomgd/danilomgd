@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { homeForRoles, useAuth } from '@/lib/auth';
 import { Spinner } from '@/components/ui';
+import { homeForRoles, useAuth } from '@/lib/auth';
 
 export default function RootPage() {
   const { status, roles } = useAuth();

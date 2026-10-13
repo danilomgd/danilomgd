@@ -21,7 +21,7 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (status === 'authenticated') router.replace(next && next.startsWith('/') ? next : homeForRoles(roles));
+    if (status === 'authenticated') router.replace(next?.startsWith('/') ? next : homeForRoles(roles));
   }, [status, roles, next, router]);
 
   async function onSubmit(e: FormEvent) {
@@ -46,7 +46,7 @@ function LoginForm() {
         router.replace('/forbidden');
         return;
       }
-      router.replace(next && next.startsWith('/') ? next : homeForRoles(userRoles));
+      router.replace(next?.startsWith('/') ? next : homeForRoles(userRoles));
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível entrar. Verifique e-mail e senha.'));
     } finally {

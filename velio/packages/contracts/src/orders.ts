@@ -225,6 +225,7 @@ export const Review = ReviewInput.extend({
   createdAt: IsoDateTime,
 });
 export type Review = z.infer<typeof Review>;
+export type ReviewInput = z.infer<typeof ReviewInput>;
 
 export const OpenDisputeInput = z.object({
   reason: z.enum(['NOT_DONE', 'POOR_QUALITY', 'DAMAGE', 'OVERCHARGE', 'OTHER']),

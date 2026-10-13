@@ -122,6 +122,8 @@ export const WalletSummary = z.object({
   heldCents: Cents,
   nextPayoutAt: IsoDateTime.nullable(),
 });
+export type WalletSummary = z.infer<typeof WalletSummary>;
+
 export const LedgerEntryPublic = z.object({
   id: Uuid,
   kind: z.string(),

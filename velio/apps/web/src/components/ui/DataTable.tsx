@@ -1,9 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import s from './DataTable.module.css';
 import { EmptyState, ErrorState } from './EmptyState';
 import { SkeletonRows } from './Skeleton';
-import s from './DataTable.module.css';
 
 export interface Column<T> {
   key: string;
@@ -56,7 +56,11 @@ export function DataTable<T>({
   if (error && !rows) {
     return (
       <div className={s.wrap}>
-        <ErrorState message={errorMessage ?? 'Falha ao carregar a lista.'} onRetry={onRetry} retrying={loading} />
+        <ErrorState
+          message={errorMessage ?? 'Falha ao carregar a lista.'}
+          onRetry={onRetry}
+          retrying={loading}
+        />
       </div>
     );
   }

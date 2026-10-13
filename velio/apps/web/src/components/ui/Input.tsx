@@ -11,7 +11,8 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export function Input({ invalid, prefix, suffix, className, style, ...rest }: InputProps) {
   const cls = [s.control, invalid ? s.controlError : '', className ?? ''].filter(Boolean).join(' ');
-  if (!prefix && !suffix) return <input className={cls} aria-invalid={invalid || undefined} style={style} {...rest} />;
+  if (!prefix && !suffix)
+    return <input className={cls} aria-invalid={invalid || undefined} style={style} {...rest} />;
   return (
     <div style={{ position: 'relative' }}>
       {prefix ? (

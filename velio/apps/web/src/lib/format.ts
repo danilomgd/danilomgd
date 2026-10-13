@@ -1,4 +1,4 @@
-import { ORDER_STATUS_LABELS, type OrderStatus, formatBRL } from '@velio/contracts';
+import { formatBRL, ORDER_STATUS_LABELS, type OrderStatus } from '@velio/contracts';
 
 export { formatBRL };
 
@@ -92,7 +92,10 @@ export function fmtBps(bps: number | null | undefined): string {
 
 /** Converte string de reais ("150,00") em centavos inteiros. */
 export function parseBRL(input: string): number | null {
-  const clean = input.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+  const clean = input
+    .replace(/[^\d,.-]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
   if (!clean) return null;
   const n = Number(clean);
   if (Number.isNaN(n)) return null;

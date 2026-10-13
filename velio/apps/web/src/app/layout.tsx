@@ -26,6 +26,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="pt-BR" className={inter.variable}>
       <head>
         {/* Variáveis CSS geradas pelos tokens do design system (claro + escuro). */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: CSS gerado em build a partir dos tokens tipados, sem entrada do usuário */}
         <style dangerouslySetInnerHTML={{ __html: themeCss() }} />
       </head>
       <body>

@@ -213,7 +213,7 @@ textarea.control {
 }
 
 .selectWrap::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 12px;
   top: 50%;
@@ -264,7 +264,7 @@ textarea.control {
 }
 
 .track::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -507,7 +507,7 @@ textarea.control {
 }
 
 .skeleton::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);

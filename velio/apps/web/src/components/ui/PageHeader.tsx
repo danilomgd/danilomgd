@@ -26,7 +26,7 @@ export function PageHeader({
         {crumbs && crumbs.length > 0 ? (
           <nav className={s.breadcrumb} aria-label="Navegação estrutural">
             {crumbs.map((c, i) => (
-              <span key={`${c.label}-${i}`} className="row" style={{ gap: 6 }}>
+              <span key={`${c.href ?? ''}|${c.label}`} className="row" style={{ gap: 6 }}>
                 {c.href ? <Link href={c.href}>{c.label}</Link> : <span>{c.label}</span>}
                 {i < crumbs.length - 1 ? <span aria-hidden>/</span> : null}
               </span>

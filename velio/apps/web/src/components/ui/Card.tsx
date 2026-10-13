@@ -10,9 +10,15 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export function Card({ title, subtitle, actions, flush, className, children, ...rest }: CardProps) {
   return (
-    <section className={[s.card, flush ? s.cardFlush : '', className ?? ''].filter(Boolean).join(' ')} {...rest}>
+    <section
+      className={[s.card, flush ? s.cardFlush : '', className ?? ''].filter(Boolean).join(' ')}
+      {...rest}
+    >
       {title || actions ? (
-        <header className={s.cardHeader} style={flush ? { padding: 'var(--space-5) var(--space-5) 0' } : undefined}>
+        <header
+          className={s.cardHeader}
+          style={flush ? { padding: 'var(--space-5) var(--space-5) 0' } : undefined}
+        >
           <div>
             {title ? <h3 className={s.cardTitle}>{title}</h3> : null}
             {subtitle ? <p className={s.cardSubtitle}>{subtitle}</p> : null}

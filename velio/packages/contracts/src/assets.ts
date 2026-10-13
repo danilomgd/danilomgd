@@ -11,6 +11,7 @@ export const VehicleInput = z.object({
 });
 export const Vehicle = VehicleInput.extend({ id: Uuid, userId: Uuid, createdAt: IsoDateTime });
 export type Vehicle = z.infer<typeof Vehicle>;
+export type VehicleInput = z.input<typeof VehicleInput>;
 
 export const EquipmentInput = z.object({
   kind: z.enum(['AIR_CONDITIONER', 'WATER_HEATER', 'OTHER']).default('AIR_CONDITIONER'),
@@ -30,3 +31,4 @@ export const Equipment = EquipmentInput.extend({
   createdAt: IsoDateTime,
 });
 export type Equipment = z.infer<typeof Equipment>;
+export type EquipmentInput = z.input<typeof EquipmentInput>;

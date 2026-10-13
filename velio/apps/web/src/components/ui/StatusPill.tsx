@@ -133,6 +133,14 @@ export function EnumPill({ value }: { value: string | null | undefined }) {
   return <Pill tone={genericTones[value] ?? 'neutral'}>{genericLabels[value] ?? value}</Pill>;
 }
 
-export function BoolPill({ value, yes = 'Ativo', no = 'Inativo' }: { value: boolean; yes?: string; no?: string }) {
+export function BoolPill({
+  value,
+  yes = 'Ativo',
+  no = 'Inativo',
+}: {
+  value: boolean;
+  yes?: string;
+  no?: string;
+}) {
   return <Pill tone={value ? 'success' : 'neutral'}>{value ? yes : no}</Pill>;
 }

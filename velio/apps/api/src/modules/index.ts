@@ -18,7 +18,7 @@ export interface Modules {
     ): Promise<boolean>;
   };
   providers: {
-    ingestLocation(providerId: string, pings: Array<Record<string, unknown>>): Promise<void>;
+    ingestLocation(providerId: string, pings: never[]): Promise<unknown>;
   };
 }
 

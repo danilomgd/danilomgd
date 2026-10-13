@@ -55,12 +55,13 @@
   background: var(--color-surface-alt);
 }
 
-.right {
-  text-align: right !important;
+.table th.right,
+.table td.right {
+  text-align: right;
 }
 
-.wrapCell {
-  white-space: normal !important;
+.table td.wrapCell {
+  white-space: normal;
   min-width: 200px;
   max-width: 420px;
 }

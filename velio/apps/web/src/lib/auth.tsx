@@ -1,7 +1,7 @@
 'use client';
 
 import type { AuthTokens, UserPublic, UserRole } from '@velio/contracts';
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, readCachedUser, resetRealtime, tokenStore, writeCachedUser } from './api';
 
 export type AuthStatus = 'loading' | 'anonymous' | 'authenticated';
@@ -45,12 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (cancelled) return;
-        // Sem token válido → onUnauthorized já limpou; sem rede → mantém cache se houver.
-        if (!tokenStore.getAccessToken()) {
+        // Sem token válido → onUnauthorized já limpou. Sem rede: mantém o cache se houver;
+        // sem cache não há como saber o papel, então volta ao login (que mostra o erro de conexão).
+        if (!tokenStore.getAccessToken() || !cached) {
           setUser(null);
           setStatus('anonymous');
-        } else if (!cached) {
-          setStatus('authenticated');
         }
       });
     return () => {
@@ -60,12 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sincroniza logout entre abas e com onUnauthorized.
   useEffect(() => {
-    return tokenStore.subscribe(() => {
+    const unsubscribe = tokenStore.subscribe(() => {
       if (!tokenStore.getAccessToken()) {
         setUser(null);
         setStatus('anonymous');
       }
     });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

@@ -27,7 +27,12 @@ export function Stat({ label, value, hint, tone = 'default', compact, onClick }:
   );
   if (onClick) {
     return (
-      <button type="button" className={cls} onClick={onClick} style={{ textAlign: 'left', cursor: 'pointer' }}>
+      <button
+        type="button"
+        className={cls}
+        onClick={onClick}
+        style={{ textAlign: 'left', cursor: 'pointer' }}
+      >
         {inner}
       </button>
     );

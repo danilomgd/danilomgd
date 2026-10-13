@@ -23,7 +23,7 @@ export function Skeleton({
 export function SkeletonRows({ rows = 6, height = 44 }: { rows?: number; height?: number }) {
   const items = Array.from({ length: rows }, (_, i) => `row-${i}`);
   return (
-    <div className="stack-sm" aria-busy aria-label="Carregando">
+    <div className="stack-sm" role="status" aria-busy aria-label="Carregando">
       {items.map((k) => (
         <Skeleton key={k} height={height} radius="var(--radius-md)" />
       ))}
@@ -34,7 +34,7 @@ export function SkeletonRows({ rows = 6, height = 44 }: { rows?: number; height?
 export function SkeletonTiles({ count = 4 }: { count?: number }) {
   const items = Array.from({ length: count }, (_, i) => `tile-${i}`);
   return (
-    <div className="grid-tiles" aria-busy aria-label="Carregando">
+    <div className="grid-tiles" role="status" aria-busy aria-label="Carregando">
       {items.map((k) => (
         <Skeleton key={k} height={92} radius="var(--radius-lg)" />
       ))}

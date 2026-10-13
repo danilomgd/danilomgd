@@ -110,7 +110,7 @@ export async function buildApp(opts: BuildOptions = {}): Promise<App> {
     return reply.status(status).send({
       error: {
         code: status === 429 ? 'RATE_LIMITED' : status >= 500 ? 'INTERNAL' : 'HTTP_ERROR',
-        message: status >= 500 ? 'Erro interno' : err.message,
+        message: status >= 500 ? 'Erro interno' : ((err as { message?: string }).message ?? 'Erro'),
       },
     });
   });
@@ -128,7 +128,9 @@ export async function buildApp(opts: BuildOptions = {}): Promise<App> {
     ctx.io = attachRealtime(fastify, cfg, {
       canJoinOrder: (user, orderId) =>
         modules.orders.canUserAccessOrder(user.userId, user.roles, user.providerId, orderId),
-      onLocation: (user, p) => modules.providers.ingestLocation(user.providerId ?? '', [p as never]),
+      onLocation: async (user, p) => {
+        await modules.providers.ingestLocation(user.providerId ?? '', [p as never]);
+      },
     });
   }
 
