@@ -1,219 +1,223 @@
 # 16 — Analytics
 
-Derivado de `packages/contracts/src/analytics.ts` (`AnalyticsEventName`, `AnalyticsEvent`, `AnalyticsBatchInput`, `DashboardMetrics`), `apps/api/src/db/schema/platform.ts` (`analytics_events`), dos efeitos `analytics.track` nas `WorkflowDefinition` e das tabelas `service_orders`, `payment_intents`, `reviews`, `dispatch_offers`, `order_events`. Ingestão e views do dashboard pertencem ao módulo `analytics` (em implementação; marcado **(conforme contrato)** onde aplicável).
+Derivado de `packages/contracts/src/analytics.ts` (`AnalyticsEventName`, `AnalyticsEvent`, `AnalyticsBatchInput`, `DashboardMetrics`), `apps/api/src/modules/analytics/{service,routes}.ts`, `apps/api/src/modules/effects.ts` (`ANALYTICS_BY_ACTION`), chamadas diretas a `analytics.track` em `payments`, `quotes`, `subscriptions`, `apps/api/src/db/schema/platform.ts` (`analytics_events`) e das tabelas `service_orders`, `order_events`, `payment_intents`, `reviews`, `dispatch_offers`. "Implementado" = verificado; "**previsto**" = não existe.
 
 ## 1. Arquitetura (ADR-013)
 
 | Camada | Implementação |
 |---|---|
-| Catálogo fechado | `AnalyticsEventName` (35 nomes). Nome fora do enum → 400. Novo evento = PR em `contracts` |
-| Ingestão pelos apps | `POST /v1/analytics/events` com `AnalyticsBatchInput { events[1..100], app, appVersion }`; lote enviado a cada 30 s ou 20 eventos ou ao ir para background; fila local persistida no dispositivo |
-| Ingestão pelo servidor | Efeito `analytics.track` em transições + eventos de pagamento/dispatch; `app = 'api'`; são a fonte de verdade para funis de ordem (não dependem do app estar aberto) |
-| Armazenamento | `analytics_events(name, user_id, provider_id, order_id, session_id, app, app_version, properties jsonb, occurred_at, created_at)`; índices por `(name, occurred_at)` e `(user_id, occurred_at)` |
-| Identidade | `user_id`/`provider_id` sempre do JWT (nunca do corpo); anônimo permitido para eventos de descoberta |
-| Dashboard | `GET /v1/admin/analytics/dashboard?from&to` → `DashboardMetrics` calculado por SQL sobre tabelas transacionais + `analytics_events` (§4) |
-| Retenção | Brutos 13 meses; agregados diários permanentes sem `user_id` |
+| Catálogo fechado | `AnalyticsEventName` (35 nomes); nome fora do enum → 400 Zod |
+| Ingestão pelos apps | `POST /v1/analytics/events` (`requireAuth`; 204) com `AnalyticsBatchInput { events 1..100, app, appVersion? }`; `user_id` do JWT; `properties` gravadas como enviadas; `occurredAt` do cliente aceito sem limite |
+| Ingestão pelo servidor | `analytics.track(name, { userId, providerId, orderId, properties })` com `app = 'api'` e `occurred_at = clock.now()`: efeito `analytics.track` das transições (mapa `ANALYTICS_BY_ACTION`) e chamadas diretas em pagamentos, orçamentos e assinaturas |
+| Armazenamento | `analytics_events`; índices `(name, occurred_at)` e `(user_id, occurred_at)` |
+| Dashboard | `GET /v1/admin/analytics/dashboard?from&to` (ops/admin; padrão últimos 30 dias) → `DashboardMetrics` por SQL direto (`analytics/service.ts: dashboard`) |
+| Retenção | Brutos 13 meses; agregados permanentes (**previsto**: job de expurgo e rollup) |
 
 ## 2. Catálogo de eventos
 
-Propriedades padrão em **todo** evento (preenchidas pelo servidor ou pelo cliente): `occurredAt`, `sessionId?` (app), `app`, `appVersion?`, `orderId?`, e, no servidor, `user_id`, `provider_id`. `properties` só aceita escalares (`string | number | boolean | null`).
+Campos padrão: `occurredAt`, `sessionId?`, `app`, `appVersion?`, `orderId?`; no servidor também `user_id`/`provider_id`. `properties` só escalares (`string | number | boolean | null`).
 
-| Evento | Disparador | Origem | Propriedades específicas | Observações |
-|---|---|---|---|---|
-| `app_open` | Abertura/retorno do app (cold/warm start) | app | `cold: boolean`, `role: customer\|provider` | Base de DAU |
-| `home_view` | Tela inicial renderizada | app | `sectionsShown: number`, `contextHintSource?: string` | Avaliar seções contextuais |
-| `category_view` | Tela de categoria | app | `categorySlug` | |
-| `service_view` | Tela de serviço | app | `serviceSlug`, `pricingModel`, `fromSection?` | |
-| `search_performed` | Busca executada | app | `queryLength: number`, `results: number` | Texto da busca **não** é enviado sem consentimento `personalization` |
-| `service_request_started` | Primeiro passo do fluxo de pedido | app | `serviceSlug`, `scheduleMode` | Início do funil de pedido |
-| `checkout_view` | Tela de confirmação com preço | app | `serviceSlug`, `totalCents?`, `hasCoupon: boolean`, `methodKind?` | |
-| `payment_method_added` | `POST /v1/me/payment-methods` ok | api | `methodKind`, `brand?` | |
-| `service_request_completed` | `POST /v1/requests` 201 | api | `serviceSlug`, `categorySlug`, `workflowKind`, `scheduleMode`, `priceCents`, `discountCents`, `regionId?` | Equivale a "pedido criado" |
-| `provider_matched` | Primeira onda com ofertas (`system.offer`) | api | `wave: 0`, `offeredCount`, `eligibleCount`, `secondsSinceRequest` | Chamado uma vez por ordem |
-| `offer_received` | `dispatch_offers` criada (push/realtime) | api | `wave`, `score`, `distanceKm`, `providerPayoutCents` | Um por prestador ofertado; `provider_id` preenchido |
-| `offer_accepted` | `POST /v1/offers/:id/accept` ok | api | `wave`, `responseSeconds`, `score` | Lado do prestador |
-| `offer_rejected` | `POST /v1/offers/:id/reject` | api | `wave`, `responseSeconds` | |
-| `offer_expired` | Timeout da onda | api | `wave` | Conta como não-resposta |
-| `provider_accepted` | Transição `provider.accept`/`operator.assign` | api | `manual: boolean`, `matchingSeconds`, `wave` | Lado da ordem |
-| `provider_en_route` | `provider.en_route` | api | `etaMinutes?`, `distanceKm?` | |
-| `provider_arrived` | `provider.arrive` | api | `travelSeconds`, `onTime?: boolean` (agendado: dentro da janela) | |
-| `service_started` | `provider.start` | api | `pinUsed: boolean`, `beforePhotos: number` | |
-| `quote_sent` | `quotes` criada | api | `kind: INITIAL\|ADDITIONAL`, `amountCents`, `items` | |
-| `quote_approved` | Cliente aprova | api | `kind`, `amountCents`, `decisionSeconds` | |
-| `quote_rejected` | Cliente recusa | api | `kind`, `amountCents`, `decisionSeconds` | |
-| `service_completed` | `provider.complete` / `system.children_completed` | api | `totalCents`, `additionalApprovedCents`, `durationSeconds`, `afterPhotos` | GMV |
-| `payment_completed` | Intent `CAPTURED` | api | `kind`, `methodKind`, `amountCents`, `gateway` | |
-| `payment_failed` | Intent `FAILED` | api | `kind`, `methodKind`, `failureCode` | Sem mensagem do emissor |
-| `order_cancelled` | `customer.cancel`, `provider.cancel`, `operator.cancel` | api | `by: customer\|provider\|platform`, `fromStatus`, `feeCents`, `secondsSinceAccept?`, `reasonCategory?` | Texto livre do motivo **não** vai |
-| `no_provider_found` | `system.no_provider` | api | `wavesTried`, `lastRadiusKm`, `regionId?` | |
-| `review_created` | `customer.review` ou avaliação do prestador | api | `rating`, `targetType`, `tags: number` | Comentário não vai |
-| `dispute_opened` | `customer.open_dispute` | api | `reason` | |
-| `subscription_started` | `POST /v1/me/subscriptions` ok | api | `planSlug`, `priceCents`, `equipments: number` | |
-| `subscription_cancelled` | Cancelamento | api | `planSlug`, `monthsActive` | |
-| `concierge_submitted` | `POST /v1/concierge/requests` | api | `inputType`, `textLength` | Texto não vai |
-| `concierge_plan_approved` | `customer.approve_plan` | api | `tasks`, `estimateMaxCents`, `plannerName`, `requiredHuman: boolean`, `confidence` | |
-| `provider_online` / `provider_offline` | `PATCH /v1/providers/me/availability` | api | `hourLocal`, `weekday`, `sessionSeconds?` (no offline) | Cobertura por hora |
-| `notification_opened` | Toque em push/in-app | app | `kind`, `secondsSinceSent` | |
+### 2.1 Eventos emitidos pelo servidor (implementado)
 
-### 2.1 Mapeamento transição → evento (efeito `analytics.track`)
+| Evento | Disparador real | Propriedades gravadas |
+|---|---|---|
+| `service_request_started` | efeito `analytics.track` em `system.start_matching` (início do matching, não o início do fluxo no app) | `{ action, from, to, kind }` |
+| `provider_matched` | `operator.assign` (atribuição manual) | idem |
+| `provider_accepted` | `provider.accept` | idem |
+| `provider_en_route` | `provider.en_route` | idem |
+| `provider_arrived` | `provider.arrive`, `provider.deliver` | idem |
+| `service_started` | `provider.start`, `provider.pickup` | idem |
+| `service_completed` | `provider.complete`, `system.children_completed` | idem |
+| `order_cancelled` | `customer.cancel`, `provider.cancel`, `operator.cancel` | idem (`action` identifica o ator) |
+| `no_provider_found` | `system.no_provider` | idem |
+| `review_created` | `customer.review` | idem |
+| `dispute_opened` | `customer.open_dispute` | idem |
+| `quote_sent` | `provider.submit_quote` (INITIAL) e `quotes.create` (ADDITIONAL, chamada direta) | `{ action, from, to, kind }` / vazio |
+| `quote_approved` / `quote_rejected` | `customer.approve_quote`/`reject_quote` (INITIAL) e `quotes.approve/reject` (todos os tipos, chamada direta) | idem |
+| `concierge_plan_approved` | `customer.approve_plan` | idem |
+| `checkout_view` | `customer.authorize_payment` (**mapeamento inadequado**: deveria ser `payment_completed` ou um evento próprio) | idem |
+| `payment_method_added` | `payments.addMethod` | `{ kind }` |
+| `payment_completed` | `payments.capture` com `captured > 0` | `{ amountCents }` |
+| `payment_failed` | intent `FAILED` (`notifyFailure`) | `{ code }` |
+| `subscription_started` / `subscription_cancelled` | `subscriptions.subscribe/cancel` | `{ planSlug }` / vazio |
 
-| Ação (`TransitionAction`) | Evento |
-|---|---|
-| `system.start_matching` | nenhum direto (marca `matching_started_at`); `provider_matched` sai no `system.offer` |
-| `system.no_provider` | `no_provider_found` |
-| `provider.accept`, `operator.assign` | `provider_accepted` (+ `offer_accepted` pelo lado do prestador) |
-| `provider.en_route`, `provider.return_depart` | `provider_en_route` |
-| `provider.arrive`, `provider.arrive_destination` | `provider_arrived` |
-| `provider.start`, `provider.pickup` | `service_started` |
-| `provider.submit_quote` | `quote_sent` |
-| `customer.approve_quote` / `customer.reject_quote` | `quote_approved` / `quote_rejected` |
-| `customer.authorize_payment` | `payment_completed` (quando autoriza) |
-| `provider.complete`, `provider.deliver`, `system.children_completed` | `service_completed` |
-| `customer.review` | `review_created` |
-| `customer.cancel`, `provider.cancel`, `operator.cancel` | `order_cancelled` |
-| `customer.open_dispute` | `dispute_opened` |
-| `customer.approve_plan` | `concierge_plan_approved` |
+Ações **sem** evento hoje: `system.offer`, `system.wave_exhausted`, `system.remind`, `system.auto_close`, `system.plan_ready`, `system.plan_needs_human`, `provider.depart`, `provider.arrive_destination`, `provider.third_party_*`, `provider.return_*`, `operator.resolve_dispute`, `operator.approve_plan`, `operator.refund`, `provider.reject`. Eventos de oferta (`offer_received`, `offer_accepted`, `offer_rejected`, `offer_expired`) e `provider_online/offline` **não são gravados** pelo servidor (os dados existem em `dispatch_offers` e `providers`); `concierge_submitted`, `service_request_completed` (pedido criado) também não.
 
-### 2.2 PII proibida
+### 2.2 Eventos do app (contrato; instrumentação a fazer nos apps)
 
-Nunca em `properties`: nome, telefone, e-mail, CPF/CNPJ, placa, endereço/CEP, coordenadas precisas (só `regionId`/bairro agregado), texto livre (busca, notas, motivos, mensagens, comentários), tokens, PIN. O ingest descarta eventos com chaves da lista negra (`name`, `phone`, `email`, `address`, `cpf`, `document`, `plate`, `comment`, `notes`, `query`) e conta `analytics.dropped_pii` para alerta. Identificação só por ids (`user_id`, `order_id`) preenchidos pelo servidor; exclusão de conta zera `user_id` (14 §10).
+| Evento | Disparador | Propriedades sugeridas |
+|---|---|---|
+| `app_open` | Cold/warm start | `cold`, `role` |
+| `home_view` | Home renderizada | `sectionsShown`, `contextHintSource` |
+| `category_view` | Tela de categoria | `categorySlug` |
+| `service_view` | Tela de serviço | `serviceSlug`, `pricingModel`, `fromSection` |
+| `search_performed` | Busca | `queryLength`, `results` (texto só com consentimento `personalization`) |
+| `service_request_started` | Primeiro passo do pedido no app (colide com o uso do servidor; ver §2.4) | `serviceSlug`, `scheduleMode` |
+| `checkout_view` | Tela de confirmação | `serviceSlug`, `totalCents`, `hasCoupon`, `methodKind` |
+| `service_request_completed` | 201 de `POST /v1/requests` | `serviceSlug`, `workflowKind`, `priceCents` |
+| `offer_received` / `offer_accepted` / `offer_rejected` / `offer_expired` | App do prestador ao exibir/responder oferta (ou mover para o servidor) | `wave`, `score`, `responseSeconds` |
+| `provider_online` / `provider_offline` | Toggle no app | `hourLocal`, `weekday`, `sessionSeconds` |
+| `concierge_submitted` | 201 do Concierge | `inputType`, `textLength` |
+| `notification_opened` | Toque em push/in-app | `kind`, `secondsSinceSent` |
 
-Divergência com `03_PRODUCT_REQUIREMENTS_DOCUMENT.md §10`: o PRD cita `service_viewed`, `checkout_viewed`, `order_created`, `quote_decided`, `order_completed`, `review_submitted`, `payment_recovered`; os nomes canônicos em `contracts` são `service_view`, `checkout_view`, `service_request_completed`, `quote_approved`/`quote_rejected`, `service_completed`, `review_created`; `payment_recovered` não existe (derivar de `payment_failed` seguido de `payment_completed` na mesma ordem). O PRD deve adotar os nomes do enum.
+### 2.3 PII proibida
+
+Nunca em `properties`: nome, telefone, e-mail, CPF/CNPJ, placa, endereço/CEP, coordenadas precisas, texto livre (busca, notas, motivos, mensagens, comentários), tokens, PIN. O ingest **não valida** isso hoje (**previsto**: lista negra de chaves `name`, `phone`, `email`, `address`, `cpf`, `document`, `plate`, `comment`, `notes`, `query` e contador `analytics.dropped_pii`). Identificação só por ids do servidor; exclusão de conta zera `user_id` (14 §10).
+
+### 2.4 Divergências de nomes a resolver
+
+| Onde | Problema | Proposta |
+|---|---|---|
+| `effects.ts` | `system.start_matching → service_request_started` (semântica de app) e `customer.authorize_payment → checkout_view` | Novos nomes no enum: `matching_started`, `payment_authorized`; ou mapear `start_matching` para `service_request_completed` |
+| `effects.ts` | `operator.assign → provider_matched` e `provider.accept → provider_accepted`: "matched" deveria sair em `system.offer` (primeira onda com ofertas) | Adicionar `system.offer → provider_matched` e `operator.assign → provider_accepted` com `properties.manual = true` |
+| PRD §10 | Cita `service_viewed`, `checkout_viewed`, `order_created`, `quote_decided`, `order_completed`, `review_submitted`, `payment_recovered`, inexistentes no enum | Alinhar PRD ao enum (`service_view`, `checkout_view`, `service_request_completed`, `quote_approved/rejected`, `service_completed`, `review_created`); `payment_recovered` derivado |
+| Ofertas | Sem eventos no servidor | Emitir `offer_received/accepted/rejected/expired` em `dispatch/service.ts` (dados já disponíveis) |
 
 ## 3. Funis
 
 ### 3.1 Cliente
 
-| Etapa | Evento | Métrica de conversão | SQL de referência (janela `:from`–`:to`) |
+| Etapa | Evento | Fonte hoje | Conversão |
 |---|---|---|---|
-| 1 | `home_view` | — | base |
-| 2 | `category_view` | % de 1 | |
-| 3 | `service_view` | % de 2 | |
-| 4 | `service_request_started` | % de 3 (interesse) | |
-| 5 | `checkout_view` | % de 4 | |
-| 6 | `service_request_completed` | % de 5 (abandono de checkout = 1 − isto) | |
-| 7 | `provider_matched` | % de 6 (densidade) | |
-| 8 | `provider_accepted` | % de 7 (aceite) | tempo médio 6→8 = matching |
-| 9 | `service_started` | % de 8 (comparecimento) | tempo 8→9 = chegada + início |
-| 10 | `service_completed` | % de 9 | |
-| 11 | `review_created` | % de 10 | |
+| 1 | `home_view` | app | base |
+| 2 | `category_view` | app | % de 1 |
+| 3 | `service_view` | app | % de 2 |
+| 4 | `service_request_started` (app) | app | % de 3 |
+| 5 | `checkout_view` (app) | app | % de 4 |
+| 6 | Pedido criado | `service_orders.created_at` (evento `service_request_completed` do app) | % de 5 |
+| 7 | Primeira oferta | `order_events(to_status = 'OFFERED')` | % de 6 |
+| 8 | `provider_accepted` | api | % de 7; tempo 6→8 = matching |
+| 9 | `service_started` | api | % de 8 |
+| 10 | `service_completed` | api | % de 9 |
+| 11 | `review_created` | api | % de 10 |
+
+Etapas 1–5 por `session_id` (app); 6–11 por `order_id` usando as tabelas transacionais como fonte de verdade (mais confiáveis que `analytics_events`):
 
 ```sql
-WITH e AS (
-  SELECT name, count(DISTINCT COALESCE(order_id, session_id, user_id::text)) n
-  FROM analytics_events
-  WHERE occurred_at BETWEEN :from AND :to AND app IN ('customer','api')
-  GROUP BY name)
-SELECT name, n, round(100.0 * n / first_value(n) OVER (ORDER BY step), 1) pct_of_top
-FROM e JOIN (VALUES ('home_view',1),('category_view',2),('service_view',3),('service_request_started',4),('checkout_view',5),
-  ('service_request_completed',6),('provider_matched',7),('provider_accepted',8),('service_started',9),('service_completed',10),('review_created',11)) s(name, step) USING (name)
-ORDER BY step;
+WITH o AS (
+  SELECT id FROM service_orders WHERE created_at BETWEEN :from AND :to AND parent_order_id IS NULL)
+SELECT
+  (SELECT count(*) FROM o) criadas,
+  (SELECT count(DISTINCT order_id) FROM order_events e JOIN o ON o.id = e.order_id WHERE e.to_status = 'OFFERED') ofertadas,
+  (SELECT count(DISTINCT order_id) FROM order_events e JOIN o ON o.id = e.order_id WHERE e.action IN ('provider.accept','operator.assign')) aceitas,
+  (SELECT count(DISTINCT order_id) FROM order_events e JOIN o ON o.id = e.order_id WHERE e.action IN ('provider.start','provider.pickup')) iniciadas,
+  (SELECT count(*) FROM service_orders s JOIN o ON o.id = s.id WHERE s.completed_at IS NOT NULL) concluidas,
+  (SELECT count(DISTINCT order_id) FROM reviews r JOIN o ON o.id = r.order_id WHERE r.target_type = 'PROVIDER') avaliadas;
 ```
-
-Etapas 1–5 usam `session_id` (app); 6–11 usam `order_id` (api). Para o funil por ordem estrito, usar `order_events`/`service_orders` (fonte transacional) e `analytics_events` só para 1–5.
 
 ### 3.2 Prestador
 
-| Etapa | Evento | Métrica |
+| Etapa | Fonte | Métrica |
 |---|---|---|
-| 1 | `provider_online` | Horas online (soma de `sessionSeconds` em `provider_offline`) |
-| 2 | `offer_received` | Ofertas por hora online |
-| 3 | `offer_accepted` | Taxa de aceite = 3 / 2; tempo de resposta (`responseSeconds`) |
-| 4 | `service_started` | Comparecimento = 4 / 3 |
-| 5 | `service_completed` | Conclusão = 5 / 4; ganhos (`providerPayoutCents` via `ledger_entries`) |
+| 1 | Online: `providers.availability` ao longo do tempo (sem evento hoje; **previsto** `provider_online/offline`) | Horas online |
+| 2 | Ofertas: `dispatch_offers` | Ofertas por hora online |
+| 3 | Aceite: `dispatch_offers.response = 'ACCEPTED'` | Taxa de aceite; `responded_at − offered_at` |
+| 4 | Início: `order_events(action = 'provider.start')` | Comparecimento |
+| 5 | Conclusão: `service_orders.completed_at` | Conclusão; ganhos via `ledger_entries(kind = 'provider_payout')` |
 
 ```sql
-SELECT provider_id,
-  sum((name='offer_received')::int) ofertas,
-  sum((name='offer_accepted')::int) aceites,
-  sum((name='service_completed')::int) concluidas,
-  avg((properties->>'responseSeconds')::float) FILTER (WHERE name IN ('offer_accepted','offer_rejected')) resp_s
-FROM analytics_events WHERE occurred_at BETWEEN :from AND :to AND provider_id IS NOT NULL
-GROUP BY provider_id;
+SELECT o.provider_id,
+  count(*) FILTER (WHERE o.response IS NOT NULL) ofertas,
+  count(*) FILTER (WHERE o.response = 'ACCEPTED') aceites,
+  avg(EXTRACT(epoch FROM o.responded_at - o.offered_at)) FILTER (WHERE o.response IN ('ACCEPTED','REJECTED')) resp_s
+FROM dispatch_offers o WHERE o.offered_at BETWEEN :from AND :to GROUP BY o.provider_id;
 ```
 
 ## 4. `DashboardMetrics`
 
-Janela `[periodStart, periodEnd)`; valores em centavos; percentuais 0–100 com uma casa; `null` quando o denominador é zero.
+### 4.1 Implementação atual (`analytics/service.ts: dashboard(from, to)`)
 
-| Campo | Definição | SQL de referência |
+Período aplicado sobre `service_orders.created_at` (todas as métricas de ordem), `reviews.created_at`, `users.created_at`. Percentuais com 2 casas; `null` quando o denominador é zero.
+
+| Campo | Cálculo implementado | Diferença em relação à definição-alvo (§4.2) |
 |---|---|---|
-| `gmvCents` | Σ `total_cents` de ordens com `completed_at` no período e status ∈ `COMPLETED, REVIEWED, CLOSED, DISPUTED` | `SELECT COALESCE(sum(total_cents),0) FROM service_orders WHERE completed_at >= :from AND completed_at < :to AND status IN ('COMPLETED','REVIEWED','CLOSED','DISPUTED')` |
-| `orders` | Ordens criadas no período (exclui filhas de concierge) | `SELECT count(*) FROM service_orders WHERE created_at >= :from AND created_at < :to AND parent_order_id IS NULL` |
-| `completedOrders` | Ordens concluídas no período | `... WHERE completed_at >= :from AND completed_at < :to AND status IN ('COMPLETED','REVIEWED','CLOSED','DISPUTED')` |
-| `cancelledOrders` | Ordens canceladas no período (qualquer ator) | `... WHERE cancelled_at >= :from AND cancelled_at < :to AND status LIKE 'CANCELLED_%'` |
-| `avgTicketCents` | `gmvCents / completedOrders` | `round(avg(total_cents))` sobre as concluídas |
-| `takeRatePct` | `Σ platform_fee_cents / gmvCents × 100` | `100.0 * sum(platform_fee_cents) / NULLIF(sum(total_cents),0)` sobre as concluídas |
-| `platformRevenueCents` | Σ `PLATFORM_FEE` − Σ `COUPON_COST` no ledger (receita líquida) | `SELECT sum(CASE kind WHEN 'PLATFORM_FEE' THEN amount_cents WHEN 'COUPON_COST' THEN -amount_cents END) FROM ledger_entries WHERE created_at >= :from AND created_at < :to AND direction = 'CREDIT' AND kind IN ('PLATFORM_FEE','COUPON_COST')` (ajustar sinal conforme conta) |
-| `repeatRatePct` | Clientes com ≥ 2 ordens concluídas nos 90 dias até `periodEnd` / clientes com ≥ 1 | `WITH c AS (SELECT customer_id, count(*) n FROM service_orders WHERE completed_at >= :to - interval '90 days' AND completed_at < :to AND status IN (...) GROUP BY 1) SELECT 100.0 * sum((n>=2)::int) / NULLIF(count(*),0) FROM c` |
-| `avgMatchingSeconds` | Média de `accepted_at − matching_started_at` das ordens aceitas no período | `SELECT avg(EXTRACT(epoch FROM accepted_at - matching_started_at)) FROM service_orders WHERE accepted_at >= :from AND accepted_at < :to AND matching_started_at IS NOT NULL` (p50/p90 com `percentile_cont`) |
-| `avgArrivalSeconds` | Média `ARRIVED − ACCEPTED` para `IMMEDIATE` | `SELECT avg(EXTRACT(epoch FROM a.created_at - o.accepted_at)) FROM order_events a JOIN service_orders o ON o.id = a.order_id WHERE a.to_status = 'ARRIVED' AND o.workflow_kind = 'IMMEDIATE' AND a.created_at >= :from AND a.created_at < :to` |
-| `avgRating` | Média de `reviews.rating` com `target_type = 'PROVIDER'` no período | `SELECT avg(rating) FROM reviews WHERE target_type='PROVIDER' AND hidden_at IS NULL AND created_at >= :from AND created_at < :to` |
-| `noProviderRatePct` | Ordens criadas no período que passaram por `NO_PROVIDER_FOUND` / ordens criadas | `SELECT 100.0 * count(DISTINCT e.order_id) / NULLIF((SELECT count(*) FROM service_orders WHERE created_at >= :from AND created_at < :to),0) FROM order_events e JOIN service_orders o ON o.id=e.order_id WHERE e.to_status='NO_PROVIDER_FOUND' AND o.created_at >= :from AND o.created_at < :to` |
-| `activeProviders` | Prestadores com ≥ 1 ordem concluída no período | `SELECT count(DISTINCT provider_id) FROM service_orders WHERE completed_at >= :from AND completed_at < :to AND status IN (...)` |
-| `newCustomers` | Usuários com papel `customer` criados no período | `SELECT count(*) FROM users WHERE created_at >= :from AND created_at < :to AND roles ? 'customer'` |
+| `gmvCents` | Σ `total_cents` de ordens **criadas** no período com status ∈ `COMPLETED, REVIEWED, CLOSED, DISPUTED` | Alvo: por `completed_at` |
+| `orders` | Ordens criadas no período (inclui filhas de concierge) | Alvo: excluir `parent_order_id IS NOT NULL` |
+| `completedOrders` | Criadas no período e hoje em status concluído | Alvo: `completed_at` no período |
+| `cancelledOrders` | Criadas no período e hoje `CANCELLED_*` | Alvo: `cancelled_at` no período |
+| `avgTicketCents` | `round(gmv / completed)` | igual |
+| `takeRatePct` | `Σ platform_fee_cents / gmv × 100` | igual (fee bruto da regra; em ordens com cupom o `ledger.platform_fee` é líquido) |
+| `platformRevenueCents` | Σ `platform_fee_cents` (bruto, antes do cupom) | Alvo: líquido (`ledger_entries.kind = 'platform_fee'`) |
+| `repeatRatePct` | Clientes com ≥ 2 ordens concluídas **em toda a história** / clientes com ≥ 1 | Alvo: janela de 90 dias até `to` |
+| `avgMatchingSeconds` | `avg(accepted_at − matching_started_at)` das concluídas | Alvo: todas as aceitas no período; p50/p90 |
+| `avgArrivalSeconds` | `avg(order_events(ARRIVED).created_at − accepted_at)` das ordens criadas no período | Alvo: só `IMMEDIATE` |
+| `avgRating` | `avg(reviews.rating)` `PROVIDER` no período | Alvo: excluir `hidden_at` |
+| `noProviderRatePct` | Ordens criadas no período **atualmente** em `NO_PROVIDER_FOUND` / criadas | Alvo: que **passaram** por `NO_PROVIDER_FOUND` (`order_events`) |
+| `activeProviders` | Prestadores `APPROVED` e `ONLINE/BUSY` **agora** | Alvo: com ≥ 1 ordem concluída no período |
+| `newCustomers` | Todos os `users` criados no período (inclui operadores/prestadores) | Alvo: `roles ? 'customer'` |
 
-Implementação sugerida (conforme contrato): view materializada `analytics_daily` por dia/região/categoria atualizada pelo job `analytics.rollup` 02:00; o dashboard soma os dias. Consultas acima são a definição canônica para validar a view.
+### 4.2 Definições-alvo (SQL de referência)
+
+| Campo | SQL |
+|---|---|
+| `gmvCents` | `SELECT COALESCE(sum(total_cents),0) FROM service_orders WHERE completed_at >= :from AND completed_at < :to AND status IN ('COMPLETED','REVIEWED','CLOSED','DISPUTED')` |
+| `orders` | `SELECT count(*) FROM service_orders WHERE created_at >= :from AND created_at < :to AND parent_order_id IS NULL` |
+| `completedOrders` | `... WHERE completed_at >= :from AND completed_at < :to AND status IN (...)` |
+| `cancelledOrders` | `... WHERE cancelled_at >= :from AND cancelled_at < :to AND status LIKE 'CANCELLED_%'` |
+| `platformRevenueCents` | `SELECT COALESCE(sum(amount_cents),0) FROM ledger_entries WHERE kind = 'platform_fee' AND direction = 'CREDIT' AND created_at >= :from AND created_at < :to` |
+| `repeatRatePct` | `WITH c AS (SELECT customer_id, count(*) n FROM service_orders WHERE completed_at >= :to - interval '90 days' AND completed_at < :to AND status IN (...) GROUP BY 1) SELECT 100.0 * sum((n>=2)::int) / NULLIF(count(*),0) FROM c` |
+| `avgMatchingSeconds` (+ p50/p90) | `SELECT avg(x), percentile_cont(0.5) WITHIN GROUP (ORDER BY x), percentile_cont(0.9) WITHIN GROUP (ORDER BY x) FROM (SELECT EXTRACT(epoch FROM accepted_at - matching_started_at) x FROM service_orders WHERE accepted_at >= :from AND accepted_at < :to AND matching_started_at IS NOT NULL) t` |
+| `avgArrivalSeconds` | `SELECT avg(EXTRACT(epoch FROM e.created_at - o.accepted_at)) FROM order_events e JOIN service_orders o ON o.id = e.order_id WHERE e.to_status = 'ARRIVED' AND o.workflow_kind = 'IMMEDIATE' AND e.created_at >= :from AND e.created_at < :to` |
+| `avgRating` | `SELECT avg(rating) FROM reviews WHERE target_type = 'PROVIDER' AND hidden_at IS NULL AND created_at >= :from AND created_at < :to` |
+| `noProviderRatePct` | `SELECT 100.0 * count(DISTINCT e.order_id) / NULLIF((SELECT count(*) FROM service_orders WHERE created_at >= :from AND created_at < :to),0) FROM order_events e JOIN service_orders o ON o.id = e.order_id WHERE e.to_status = 'NO_PROVIDER_FOUND' AND o.created_at >= :from AND o.created_at < :to` |
+| `activeProviders` | `SELECT count(DISTINCT provider_id) FROM service_orders WHERE completed_at >= :from AND completed_at < :to AND status IN (...)` |
+| `newCustomers` | `SELECT count(*) FROM users WHERE created_at >= :from AND created_at < :to AND roles ? 'customer'` |
+
+Plano: ajustar `dashboard()` para estas definições (teste de integração comparando com SQL) e, em V1, materializar `analytics_daily` por dia/região/categoria (job `analytics.rollup`).
 
 ## 5. Métricas operacionais
 
 | Métrica | Definição | Fonte |
 |---|---|---|
-| Tempo de matching p50/p90 | `percentile_cont(0.5/0.9)` de `accepted_at − matching_started_at` | `service_orders` |
-| Tempo até chegada p50 (IMMEDIATE) | `ARRIVED − ACCEPTED` | `order_events` |
-| Pontualidade agendada | % de `ARRIVED` com `created_at ∈ [scheduled_for, scheduled_for + window_minutes]` | `order_events` + `service_orders` |
-| Taxa sem prestador por região/categoria/hora | `no_provider_found` agrupado por `regionId`, categoria, `extract(hour)` | `analytics_events` |
-| Ondas por ordem | `max(wave)+1` por ordem aceita | `dispatch_rounds` |
-| Taxa de aceite por onda | aceitas/ofertadas por `wave` | `dispatch_offers` |
-| Cancelamentos por ator e fase | `order_cancelled` por `by` × `fromStatus` | `analytics_events` ou `order_events(to_status LIKE 'CANCELLED_%')` com `from_status` |
-| Cancelamento do prestador pós-aceite | `CANCELLED_BY_PROVIDER` eventos (`provider.cancel`) / aceites | `order_events` |
-| Taxa de aprovação de orçamento adicional | `quote_approved(kind=ADDITIONAL)` / `quote_sent(kind=ADDITIONAL)` | `quotes` |
-| Disputas / concluídas | `disputes` / concluídas | `disputes`, `service_orders` |
-| Falhas de pagamento por código | `payment_failed` por `failureCode`/`methodKind` | `payment_intents` |
-| PIX expirado e recuperado | intents `pix_expired` seguidas de `CAPTURED` na mesma ordem | `payment_intents` |
-| Cobertura | prestadores `ONLINE` por hora × região (`provider_online/offline`) | `analytics_events` |
-| Horas online por prestador | Σ `sessionSeconds` | `analytics_events` |
-| Tempo de aprovação de prestador | `verified_at − created_at` (p50) | `providers` |
-| Abertura de push | `notification_opened` / `notifications(status=SENT)` por `kind` | `analytics_events`, `notifications` |
+| Matching p50/p90 | `accepted_at − matching_started_at` | `service_orders` |
+| Chegada p50 (IMMEDIATE) | `ARRIVED − accepted_at` | `order_events` |
+| Pontualidade agendada | `ARRIVED` em `[scheduled_for, scheduled_for + window_minutes]` | `order_events` + `service_orders` |
+| Sem prestador por região/categoria/hora | `order_events(NO_PROVIDER_FOUND)` × `region_id`, `category_id`, hora | `order_events`, `service_orders` |
+| Ondas por ordem; aceite por onda | `dispatch_rounds`, `dispatch_offers` | 12 §10 |
+| Cancelamentos por ator e fase | `order_events` com `to_status LIKE 'CANCELLED_%'` (ator em `action`) e `from_status`; ou `analytics_events(order_cancelled).properties.action/from` | |
+| Cancelamento do prestador pós-aceite | `order_events(action = 'provider.cancel')` / aceites | |
+| Aprovação de adicional | `quotes(kind ADDITIONAL)` `APPROVED` / total | `quotes` |
+| Disputas / concluídas | `disputes` / concluídas | |
+| Falhas de pagamento por código | `payment_intents(status FAILED).failure_code` | |
+| PIX cancelado por timeout | `failure_code = 'pix_timeout'` | |
+| Cobertura (online por hora) | **previsto** (`provider_online/offline`); interim: amostragem de `providers.availability` | |
+| Tempo de aprovação de prestador | `verified_at − created_at` | `providers` |
+| Abertura de push | `notification_opened` (app) / `notifications(channel PUSH, status SENT)` | |
 
 ```sql
--- cancelamentos por ator e fase, últimos 30 dias
-SELECT properties->>'by' ator, properties->>'fromStatus' fase, count(*) n, avg((properties->>'feeCents')::int) taxa_media
-FROM analytics_events WHERE name = 'order_cancelled' AND occurred_at > now() - interval '30 days'
-GROUP BY 1,2 ORDER BY n DESC;
+-- cancelamentos por ator e fase (30 dias)
+SELECT action, from_status, count(*) FROM order_events
+WHERE to_status LIKE 'CANCELLED_%' AND created_at > now() - interval '30 days' GROUP BY 1,2 ORDER BY 3 DESC;
 ```
 
-## 6. North Star e metas iniciais
+## 6. North Star e metas
 
-**North Star: ordens concluídas com avaliação ≥ 4 por semana** (combina volume, execução e qualidade; exclui cancelamentos e disputas).
+**North Star: ordens concluídas com avaliação ≥ 4 por semana.**
 
-| Métrica | Mês 3 (MVP, 1 cidade) | Mês 9 (V1) | Fonte |
+| Métrica | Mês 3 (MVP) | Mês 9 (V1) | Fonte |
 |---|---|---|---|
-| North Star | 200 / semana | 1.500 / semana | `service_orders` + `reviews` |
+| North Star | 200/semana | 1.500/semana | `service_orders` + `reviews` |
 | GMV mensal | R$ 150 mil | R$ 1 milhão | `gmvCents` |
-| Ordens criadas / mês | 1.200 | 8.000 | `orders` |
-| Taxa de conclusão | > 80 % | > 88 % | `completedOrders / orders` |
-| Ticket médio | R$ 150 | R$ 170 | `avgTicketCents` |
-| Take rate | 18–22 % | 18–22 % | `takeRatePct` |
-| Repeat rate 90 d | > 35 % | > 45 % | `repeatRatePct` |
-| Matching p50 / p90 | 3 / 10 min | 2 / 6 min | §5 |
-| Chegada p50 (IMMEDIATE) | 45 min | 35 min | `avgArrivalSeconds` |
-| `NO_PROVIDER_FOUND` | < 10 % | < 4 % | `noProviderRatePct` |
-| Aceite onda 0 | > 30 % | > 40 % | `dispatch_offers` |
-| Rating médio | > 4,6 | > 4,7 | `avgRating` |
-| Disputas | < 2 % | < 1 % | §5 |
-| Prestadores ativos / mês | 80 | 500 | `activeProviders` |
+| Ordens/mês | 1.200 | 8.000 | `orders` |
+| Conclusão | > 80 % | > 88 % | |
+| Ticket médio | R$ 150 | R$ 170 | |
+| Take rate | 18–22 % | 18–22 % | |
+| Repeat 90 d | > 35 % | > 45 % | |
+| Matching p50/p90 | 3/10 min | 2/6 min | |
+| Chegada p50 | 45 min | 35 min | |
+| `NO_PROVIDER_FOUND` | < 10 % | < 4 % | |
+| Aceite onda 1 | > 30 % | > 40 % | |
+| Rating | > 4,6 | > 4,7 | |
+| Disputas | < 2 % | < 1 % | |
+| Prestadores ativos/mês | 80 | 500 | |
 
-Guardrails (não podem piorar ao otimizar a North Star): cancelamento pelo prestador pós-aceite < 5 %, disputas < 2 %, `payment_failed` < 5 %, pontualidade agendada > 85 %.
+Guardrails: cancelamento do prestador pós-aceite < 5 %, disputas < 2 %, `payment_failed` < 5 %, pontualidade agendada > 85 %.
 
 ## 7. Evolução
 
-| Fase | Capacidade | Detalhe |
-|---|---|---|
-| MVP | Tabela única + SQL + dashboard `DashboardMetrics` | Suficiente para < 1 M eventos/mês |
-| V1 | Rollup diário (`analytics_daily`) e particionamento mensal de `analytics_events` por `occurred_at` | Mantém consultas < 1 s |
-| V1 | Export para warehouse por CDC (Postgres logical replication → BigQuery/ClickHouse via Debezium/Airbyte) das tabelas `analytics_events`, `service_orders`, `order_events`, `dispatch_rounds`, `dispatch_offers`, `payment_intents`, `ledger_entries`, `reviews` (sem `users` identificáveis: pseudonimizar `user_id` com HMAC no conector) | Fonte única para BI; `domain_events` como stream alternativo |
-| V1 | Métricas por região/categoria/hora e coortes de retenção (semana de primeira ordem × semanas seguintes) | |
-| V2 | Experimentação: `experiments(id, name, variants, allocation)` e `experiment_assignments(user_id, experiment_id, variant)` por hash determinístico de `user_id`; variante anexada como propriedade padrão `exp_<id>` em todos os eventos; análise de conversão por variante no warehouse; flags em `platform_settings` para liga/desliga | Testes de pesos de matching por categoria, textos de notificação, ordem das seções da home |
-| V2 | Alertas automáticos sobre métricas (queda de aceite, alta de `payment_failed`) via job `analytics.watch` → `incidents` | |
-| V3 | Modelos de previsão de demanda e aprendizado de pesos (12 §14) consumindo o warehouse | |
+| Fase | Capacidade |
+|---|---|
+| MVP | Corrigir `ANALYTICS_BY_ACTION` (§2.4), emitir eventos de oferta e online/offline no servidor, lista negra de PII no ingest, dashboard pelas definições-alvo |
+| V1 | `analytics_daily` (rollup) e particionamento mensal de `analytics_events`; coortes de retenção; export CDC (replicação lógica → BigQuery/ClickHouse) de `analytics_events`, `service_orders`, `order_events`, `dispatch_*`, `payment_intents`, `ledger_entries`, `reviews` com `user_id` pseudonimizado por HMAC |
+| V2 | Experimentação: `experiments`/`experiment_assignments` por hash de `user_id`; variante como propriedade padrão `exp_<id>`; flags em `platform_settings`; alertas automáticos (`analytics.watch` → `incidents`) |
+| V3 | Previsão de demanda e aprendizado de pesos sobre o warehouse (12 §14) |
