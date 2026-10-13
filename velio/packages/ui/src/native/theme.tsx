@@ -1,7 +1,6 @@
-import { type ReactNode, createContext, useContext, useMemo } from 'react';
+import { createContext, type ReactNode, useContext, useMemo } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
 import {
-  type Theme,
   darkTheme,
   elevation,
   layout,
@@ -10,6 +9,7 @@ import {
   radius,
   spacing,
   statusTone,
+  type Theme,
   typography,
 } from '../tokens';
 

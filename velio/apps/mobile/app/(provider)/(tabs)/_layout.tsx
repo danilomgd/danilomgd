@@ -1,7 +1,7 @@
-import { TERMINAL_ORDER_STATUSES } from '@velio/contracts';
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { TERMINAL_ORDER_STATUSES } from '@velio/contracts';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { useEffect } from 'react';
 import { ActiveOrderBanner } from '@/components/ActiveOrderBanner';
@@ -24,9 +24,17 @@ const TABS: TabSpec[] = [
 export default function ProviderTabs() {
   const router = useRouter();
   const { provider } = useProviderGate(true);
-  const active = useQuery({ queryKey: qk.provider.orders('active'), queryFn: () => api.provider.orders({ scope: 'active', limit: 5 }), refetchInterval: 30_000 });
+  const active = useQuery({
+    queryKey: qk.provider.orders('active'),
+    queryFn: () => api.provider.orders({ scope: 'active', limit: 5 }),
+    refetchInterval: 30_000,
+  });
   const activeOrder = active.data?.items.find((o) => !TERMINAL_ORDER_STATUSES.has(o.status)) ?? null;
-  const offers = useQuery({ queryKey: qk.provider.offers, queryFn: () => api.provider.offers(), refetchInterval: 20_000 });
+  const offers = useQuery({
+    queryKey: qk.provider.offers,
+    queryFn: () => api.provider.offers(),
+    refetchInterval: 20_000,
+  });
   const pendingOffers = offers.data?.filter((o) => o.response === 'PENDING').length ?? 0;
 
   useProviderTracking(provider?.availability ?? 'OFFLINE', activeOrder);
@@ -43,7 +51,17 @@ export default function ProviderTabs() {
   );
 
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} tabs={TABS} above={<ActiveOrderBanner role="provider" />} badges={{ index: pendingOffers }} />}>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => (
+        <TabBar
+          {...props}
+          tabs={TABS}
+          above={<ActiveOrderBanner audience="provider" />}
+          badges={{ index: pendingOffers }}
+        />
+      )}
+    >
       {TABS.map((t) => (
         <Tabs.Screen key={t.name} name={t.name} options={{ title: t.label }} />
       ))}

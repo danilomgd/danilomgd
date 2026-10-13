@@ -12,7 +12,10 @@ export interface SegmentedControlProps<T extends string> {
 export function SegmentedControl<T extends string>({ options, value, onChange }: SegmentedControlProps<T>) {
   const { colors, radius, elevation } = useTheme();
   return (
-    <View style={[styles.track, { backgroundColor: colors.surfaceAlt, borderRadius: radius.md }]} accessibilityRole="tablist">
+    <View
+      style={[styles.track, { backgroundColor: colors.surfaceAlt, borderRadius: radius.md }]}
+      accessibilityRole="tablist"
+    >
       {options.map((o) => {
         const selected = o.value === value;
         return (
@@ -29,7 +32,11 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
               selected ? { backgroundColor: colors.surface, ...elevation.sm } : null,
             ]}
           >
-            <Text variant="labelSm" color={selected ? 'primary' : o.disabled ? 'muted' : 'muted'} numberOfLines={1}>
+            <Text
+              variant="labelSm"
+              color={selected ? 'primary' : o.disabled ? 'muted' : 'muted'}
+              numberOfLines={1}
+            >
               {o.label}
             </Text>
           </Pressable>

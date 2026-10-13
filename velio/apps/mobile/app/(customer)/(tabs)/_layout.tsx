@@ -11,7 +11,10 @@ const TABS: TabSpec[] = [
 
 export default function CustomerTabs() {
   return (
-    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} tabs={TABS} above={<ActiveOrderBanner role="customer" />} />}>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <TabBar {...props} tabs={TABS} above={<ActiveOrderBanner audience="customer" />} />}
+    >
       {TABS.map((t) => (
         <Tabs.Screen key={t.name} name={t.name} options={{ title: t.label }} />
       ))}

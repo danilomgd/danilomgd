@@ -3,7 +3,19 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 /** Seção com título, subtítulo e ação "Ver todos" opcional; 24 pt entre seções. */
-export function Section({ title, subtitle, action, children, style }: { title?: string | null; subtitle?: string | null; action?: { label: string; onPress: () => void }; children: ReactNode; style?: object }) {
+export function Section({
+  title,
+  subtitle,
+  action,
+  children,
+  style,
+}: {
+  title?: string | null;
+  subtitle?: string | null;
+  action?: { label: string; onPress: () => void };
+  children: ReactNode;
+  style?: object;
+}) {
   const { spacing } = useTheme();
   return (
     <View style={[{ marginBottom: spacing[6] }, style]}>
@@ -50,7 +62,13 @@ export function KeyValue({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 12, gap: 12 },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
   texts: { flex: 1, gap: 2 },
   action: { minHeight: 32, justifyContent: 'center' },
   kv: { flexDirection: 'row', justifyContent: 'space-between', gap: 16, minHeight: 32, alignItems: 'center' },

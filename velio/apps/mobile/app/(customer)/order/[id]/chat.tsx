@@ -1,2 +1,5 @@
-export default function CustomerChat() { return <ChatScreen role="customer" />; }
+export default function CustomerChat() {
+  return <ChatScreen audience="customer" />;
+}
+
 import { ChatScreen } from '@/features/shared/ChatScreen';

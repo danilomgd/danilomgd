@@ -23,7 +23,12 @@ export function Header({ title, subtitle, back = true, close, right, onBack, onM
   return (
     <View style={[styles.bar, { paddingHorizontal: spacing[2] }]}>
       {back || close ? (
-        <IconButton icon={close ? 'x' : 'arrow-left'} accessibilityLabel={close ? 'Fechar' : 'Voltar'} onPress={goBack} variant={onMedia ? 'onMedia' : 'ghost'} />
+        <IconButton
+          icon={close ? 'x' : 'arrow-left'}
+          accessibilityLabel={close ? 'Fechar' : 'Voltar'}
+          onPress={goBack}
+          variant={onMedia ? 'onMedia' : 'ghost'}
+        />
       ) : (
         <View style={styles.spacer} />
       )}

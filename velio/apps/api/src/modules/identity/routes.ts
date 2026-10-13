@@ -12,24 +12,30 @@ import { requireAuth } from '../../lib/auth';
 import { parse } from '../../lib/validate';
 import type { IdentityService } from './service';
 
-const otpRateLimit = {
+/** 5 pedidos de código por minuto por IP+telefone. */
+const otpRequestRateLimit = {
   rateLimit: {
     max: 5,
     timeWindow: '1 minute',
-    keyGenerator: (req: { ip: string; body: unknown }) => {
-      const phone = (req.body as { phone?: string } | null)?.phone ?? '';
-      return `${req.ip}:${phone}`;
-    },
+    keyGenerator: (req: { ip: string; body: unknown }) => `${req.ip}:${(req.body as { phone?: string } | null)?.phone ?? ''}`,
+  },
+};
+/** Verificação por IP+desafio; a regra de negócio (5 tentativas) é aplicada antes deste teto. */
+const otpVerifyRateLimit = {
+  rateLimit: {
+    max: 10,
+    timeWindow: '1 minute',
+    keyGenerator: (req: { ip: string; body: unknown }) => `${req.ip}:${(req.body as { challengeId?: string } | null)?.challengeId ?? ''}`,
   },
 };
 
 export function registerIdentityRoutes(app: FastifyInstance, svc: IdentityService) {
-  app.post('/v1/auth/otp/request', { config: otpRateLimit }, async (req) => {
+  app.post('/v1/auth/otp/request', { config: otpRequestRateLimit }, async (req) => {
     const b = parse(OtpRequestInput, req.body);
     return svc.requestOtp(b.phone, b.app);
   });
 
-  app.post('/v1/auth/otp/verify', { config: otpRateLimit }, async (req) => {
+  app.post('/v1/auth/otp/verify', { config: otpVerifyRateLimit }, async (req) => {
     const b = parse(OtpVerifyInput, req.body);
     return svc.verifyOtp(b.challengeId, b.code, b.deviceName);
   });

@@ -1,5 +1,5 @@
-import { Button, EmptyState, ListSkeleton, SegmentedControl, Text, useTheme } from '@velio/ui/native';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { Button, EmptyState, ListSkeleton, SegmentedControl, Text, useTheme } from '@velio/ui/native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
@@ -40,12 +40,32 @@ export default function ProviderOrdersScreen() {
           items.length ? (
             <View style={{ gap: spacing[2] }}>
               {items.map((o) => (
-                <OrderRow key={o.id} order={o} role="provider" onPress={() => router.push(`/(provider)/order/${o.id}`)} />
+                <OrderRow
+                  key={o.id}
+                  order={o}
+                  audience="provider"
+                  onPress={() => router.push(`/(provider)/order/${o.id}`)}
+                />
               ))}
-              {query.hasNextPage ? <Button label="Carregar mais" variant="ghost" onPress={() => query.fetchNextPage()} loading={query.isFetchingNextPage} /> : null}
+              {query.hasNextPage ? (
+                <Button
+                  label="Carregar mais"
+                  variant="ghost"
+                  onPress={() => query.fetchNextPage()}
+                  loading={query.isFetchingNextPage}
+                />
+              ) : null}
             </View>
           ) : (
-            <EmptyState icon="clipboard" title={scope === 'active' ? 'Nenhum serviço ativo' : 'Sem histórico ainda'} description={scope === 'active' ? 'Fique online para receber ofertas.' : 'Seus serviços concluídos aparecem aqui.'} />
+            <EmptyState
+              icon="clipboard"
+              title={scope === 'active' ? 'Nenhum serviço ativo' : 'Sem histórico ainda'}
+              description={
+                scope === 'active'
+                  ? 'Fique online para receber ofertas.'
+                  : 'Seus serviços concluídos aparecem aqui.'
+              }
+            />
           )
         }
       </QueryState>

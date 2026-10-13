@@ -1,5 +1,5 @@
-import type { RealtimePayload, ServiceOrderDetail } from '@velio/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RealtimePayload, ServiceOrderDetail } from '@velio/contracts';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { qk } from '@/lib/query';

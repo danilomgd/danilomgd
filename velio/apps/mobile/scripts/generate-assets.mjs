@@ -69,13 +69,21 @@ function mark(size, bg, fg, { transparentBg = false, scale = 1, dot = false } = 
   const stroke = size * 0.075 * scale;
   const pts = { ax: c - s, ay: c - s * 0.75, vx: c, vy: c + s * 0.8, bx: c + s, by: c - s * 0.75 };
   return png(size, size, (x, y) => {
-    const d = Math.min(segDist(x, y, pts.ax, pts.ay, pts.vx, pts.vy), segDist(x, y, pts.vx, pts.vy, pts.bx, pts.by));
-    const inDot = dot && Math.hypot(x - (c + s * 1.15), y - (c - s * 0.95)) < stroke * 0.55;
+    const d = Math.min(
+      segDist(x, y, pts.ax, pts.ay, pts.vx, pts.vy),
+      segDist(x, y, pts.vx, pts.vy, pts.bx, pts.by),
+    );
+    const inDot = dot && Math.hypot(x - (c + s * 1.32), y - (c - s * 1.12)) < stroke * 0.5;
     const edge = Math.max(0, Math.min(1, stroke / 2 - d + 0.5));
     if (edge > 0 || inDot) {
       const a = inDot ? 1 : edge;
       if (transparentBg) return [fr, fgc, fb, Math.round(a * 255)];
-      return [Math.round(br + (fr - br) * a), Math.round(bgc + (fgc - bgc) * a), Math.round(bb + (fb - bb) * a), 255];
+      return [
+        Math.round(br + (fr - br) * a),
+        Math.round(bgc + (fgc - bgc) * a),
+        Math.round(bb + (fb - bb) * a),
+        255,
+      ];
     }
     return transparentBg ? [0, 0, 0, 0] : [br, bgc, bb, 255];
   });
@@ -89,7 +97,13 @@ for (const [name, v] of Object.entries(variants)) {
   const dir = join(root, name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'icon.png'), mark(1024, v.bg, v.fg, { dot: v.dot }));
-  writeFileSync(join(dir, 'adaptive-icon.png'), mark(1024, v.bg, v.fg, { transparentBg: true, scale: 0.8, dot: v.dot }));
-  writeFileSync(join(dir, 'splash.png'), mark(1024, v.bg, v.fg, { transparentBg: true, scale: 0.5, dot: v.dot }));
+  writeFileSync(
+    join(dir, 'adaptive-icon.png'),
+    mark(1024, v.bg, v.fg, { transparentBg: true, scale: 0.8, dot: v.dot }),
+  );
+  writeFileSync(
+    join(dir, 'splash.png'),
+    mark(1024, v.bg, v.fg, { transparentBg: true, scale: 0.5, dot: v.dot }),
+  );
   console.log(`assets/${name}: icon.png, adaptive-icon.png, splash.png`);
 }

@@ -210,6 +210,8 @@ export function createOrdersService(
       case 'provider.cancel':
         patch.providerId = null;
         patch.acceptedAt = null;
+        patch.matchingStartedAt = now; // novo ciclo de matching
+        patch.dispatchWave = 0;
         patch.metadata = { ...m, excludedProviderIds: [...(m.excludedProviderIds ?? []), ...(o.providerId ? [o.providerId] : [])] };
         break;
       case 'provider.start':
@@ -664,14 +666,17 @@ export function createOrdersService(
     const code = input.itemCode.toUpperCase().replace(/[^A-Z0-9-]/g, '');
     const plate = (meta(o).vehiclePlate ?? '').toUpperCase();
     const custody = (o.custodyCode ?? '').toUpperCase();
-    const valid = (custody && (code === custody || code === custody.replace('-', ''))) || (plate && code.replace('-', '') === plate);
-    if (!valid) throw errors.unprocessable('Código não corresponde ao item desta ordem');
+    const matchesCustody = Boolean(custody) && (code === custody || code === custody.replace('-', ''));
+    const matchesPlate = Boolean(plate) && code.replace('-', '') === plate;
+    if (!matchesCustody && !matchesPlate) throw errors.unprocessable('Código não corresponde ao item desta ordem');
+    // Item canônico: a placa identifica veículos; o código de custódia identifica os demais itens.
+    const itemCode = matchesPlate ? plate : custody;
     const [dup] = await db.select({ id: custodyEvents.id }).from(custodyEvents).where(and(eq(custodyEvents.orderId, orderId), eq(custodyEvents.step, o.status))).limit(1);
     if (dup) return;
     const parties = CUSTODY_PARTIES[o.status as OrderStatus] ?? { from: 'PROVIDER', to: 'PROVIDER' };
     await db.insert(custodyEvents).values({
       orderId,
-      itemCode: code,
+      itemCode,
       step: o.status,
       fromParty: parties.from,
       toParty: parties.to,
@@ -692,7 +697,7 @@ export function createOrdersService(
     const parties = CUSTODY_PARTIES[step] ?? { from: 'PROVIDER', to: 'PROVIDER' };
     await db.insert(custodyEvents).values({
       orderId: c.order.id,
-      itemCode: c.order.custodyCode ?? meta(c.order).vehiclePlate ?? 'N/A',
+      itemCode: meta(c.order).vehiclePlate ?? c.order.custodyCode ?? 'N/A',
       step,
       fromParty: parties.from,
       toParty: parties.to,
@@ -864,8 +869,11 @@ export function createOrdersService(
         .where(and(eq(serviceOrders.customerId, userId), notInArray(serviceOrders.status, [...terminal, 'COMPLETED']), isNull(serviceOrders.parentOrderId)))
         .orderBy(desc(serviceOrders.createdAt))
         .limit(5);
+      const now = adapters.clock.now();
       const out: Array<{ id: string; status: string; serviceName: string }> = [];
       for (const o of rows) {
+        // Agendamentos futuros ainda não em execução são "próximos", não "em andamento".
+        if (o.scheduledFor && o.scheduledFor.getTime() > now.getTime() && PRE_EXECUTION_STATES.has(o.status as OrderStatus)) continue;
         const s = await deps.catalog.getServiceRow(o.serviceId);
         out.push({ id: o.id, status: o.status, serviceName: s.name });
       }

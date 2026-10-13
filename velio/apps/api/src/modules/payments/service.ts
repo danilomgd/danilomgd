@@ -15,6 +15,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { AppContext } from '../../context';
 import { couponRedemptions, coupons, paymentIntents, paymentMethods, refunds, webhookEvents } from '../../db/schema';
+import { newId } from '../../db/schema/_shared';
 import { errors } from '../../lib/errors';
 import { type Exec, iso } from '../_shared/util';
 import type { PlatformService } from '../admin/platform';
@@ -241,7 +242,7 @@ export function createPaymentsService(
     /** PIX antecipado na criação do pedido (doc 11 §7). */
     async createInitialPixIntent(exec: Exec, order: OrderRow, methodId: string) {
       const method = await getMethodRow(order.customerId, methodId, exec);
-      const intent = await createAndAuthorize(exec, { order, method, kind: 'INITIAL', amountCents: order.totalCents ?? 0, idempotencyKey: `${order.id}:INITIAL:${adapters.clock.now().getTime()}` });
+      const intent = await createAndAuthorize(exec, { order, method, kind: 'INITIAL', amountCents: order.totalCents ?? 0, idempotencyKey: `${order.id}:INITIAL:${newId()}` });
       return { id: intent.id };
     },
 
@@ -261,7 +262,7 @@ export function createPaymentsService(
         if (row) await notifyFailure(order, row);
         return row ?? null;
       }
-      const intent = await createAndAuthorize(db, { order, method, kind: 'INITIAL', amountCents: order.totalCents ?? 0, idempotencyKey: `${order.id}:INITIAL:${adapters.clock.now().getTime()}` });
+      const intent = await createAndAuthorize(db, { order, method, kind: 'INITIAL', amountCents: order.totalCents ?? 0, idempotencyKey: `${order.id}:INITIAL:${newId()}` });
       if (intent.status === 'FAILED') await notifyFailure(order, intent);
       else if (intent.status === 'AUTHORIZED') await onAuthorized(order);
       return intent;
@@ -287,7 +288,7 @@ export function createPaymentsService(
       }
       await l.orders.setPaymentMethod(orderId, { id: method.id, kind: method.kind as PaymentMethodKind });
       const fresh = await l.orders.getById(orderId);
-      const intent = await createAndAuthorize(db, { order: fresh, method, kind: 'INITIAL', amountCents: fresh.totalCents ?? 0, idempotencyKey: `${orderId}:INITIAL:${adapters.clock.now().getTime()}` });
+      const intent = await createAndAuthorize(db, { order: fresh, method, kind: 'INITIAL', amountCents: fresh.totalCents ?? 0, idempotencyKey: `${orderId}:INITIAL:${newId()}` });
       if (intent.status === 'FAILED') await notifyFailure(fresh, intent);
       else if (intent.status === 'AUTHORIZED') await onAuthorized(fresh);
       return toIntentDto(intent);
@@ -404,7 +405,7 @@ export function createPaymentsService(
         const [row] = await db.insert(paymentIntents).values({ userId: order.customerId, orderId: order.id, kind: 'CANCELLATION_FEE', methodKind: 'PIX', amountCents: fee, capturedCents: fee, status: 'CAPTURED', gateway: gateway.name, gatewayRef: `${paidPix.gatewayRef}:fee` }).returning();
         feeIntent = row ?? null;
       } else if (method) {
-        const intent = await createAndAuthorize(db, { order, method, kind: 'CANCELLATION_FEE', amountCents: fee, idempotencyKey: `${order.id}:CANCELLATION_FEE` });
+        const intent = await createAndAuthorize(db, { order, method, kind: 'CANCELLATION_FEE', amountCents: fee, idempotencyKey: `${order.id}:CANCELLATION_FEE:${newId()}` });
         if (intent.status === 'AUTHORIZED') {
           let ok = true;
           if (intent.methodKind === 'CARD' && intent.gatewayRef) ok = (await gateway.capture({ gatewayRef: intent.gatewayRef, amountCents: fee })).ok;

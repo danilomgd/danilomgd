@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, type PressableProps, StyleSheet, View, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  type PressableProps,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { Icon, type IconProps } from './Icon';
 import { Text } from './Text';
 import { TOUCH_TARGET, useTheme } from './theme';
@@ -70,7 +77,8 @@ export function Button({
           {
             height: HEIGHTS[size],
             borderRadius: radius.md,
-            backgroundColor: pressed && !isDisabled && variant === 'primary' ? colors.primaryHover : palette.bg,
+            backgroundColor:
+              pressed && !isDisabled && variant === 'primary' ? colors.primaryHover : palette.bg,
             opacity: pressed && !isDisabled && variant !== 'primary' ? 0.8 : 1,
           },
         ]}

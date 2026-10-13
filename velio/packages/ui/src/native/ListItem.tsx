@@ -44,12 +44,21 @@ export function ListItem({
     <View
       style={[
         styles.row,
-        { minHeight: subtitle ? 72 : 56, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0, borderBottomColor: colors.border },
+        {
+          minHeight: subtitle ? 72 : 56,
+          borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
+          borderBottomColor: colors.border,
+        },
       ]}
     >
-      {leading ?? (icon ? <Icon name={icon} size="lg" color={destructive ? colors.danger : colors.textMuted} /> : null)}
+      {leading ??
+        (icon ? <Icon name={icon} size="lg" color={destructive ? colors.danger : colors.textMuted} /> : null)}
       <View style={styles.texts}>
-        <Text variant="body" color={destructive ? 'danger' : disabled ? 'muted' : 'primary'} numberOfLines={2}>
+        <Text
+          variant="body"
+          color={destructive ? 'danger' : disabled ? 'muted' : 'primary'}
+          numberOfLines={2}
+        >
           {title}
         </Text>
         {subtitle ? (
@@ -61,7 +70,7 @@ export function ListItem({
       {value ? <Text variant="mono">{value}</Text> : null}
       {trailing}
       {selected ? <Icon name="check" size="md" color={colors.primary} /> : null}
-      {chevron ?? (onPress && !selected && !trailing) ? (
+      {(chevron ?? (onPress && !selected && !trailing)) ? (
         <Icon name="chevron-right" size="md" color={colors.textMuted} />
       ) : null}
       <View style={{ width: spacing[0] }} />

@@ -1,5 +1,5 @@
-import { Chip, EmptyState, ListSkeleton, ServiceCard, Text, useTheme } from '@velio/ui/native';
 import { useQuery } from '@tanstack/react-query';
+import { Chip, EmptyState, ListSkeleton, ServiceCard, Text, useTheme } from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -18,7 +18,11 @@ export default function CategoryScreen() {
   const categories = useQuery({ queryKey: qk.categories, queryFn: () => api.catalog.categories() });
   const category = categories.data?.find((c) => c.slug === slug);
   const children = categories.data?.filter((c) => c.parentId === category?.id && c.active) ?? [];
-  const services = useQuery({ queryKey: qk.services(slug), queryFn: () => api.catalog.services({ category: slug }), enabled: Boolean(slug) });
+  const services = useQuery({
+    queryKey: qk.services(slug),
+    queryFn: () => api.catalog.services({ category: slug }),
+    enabled: Boolean(slug),
+  });
 
   useEffect(() => {
     if (category) track('category_view', { slug: category.slug });
@@ -33,9 +37,18 @@ export default function CategoryScreen() {
         </Text>
       ) : null}
       {children.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing[2], paddingBottom: spacing[4] }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: spacing[2], paddingBottom: spacing[4] }}
+        >
           {children.map((c) => (
-            <Chip key={c.id} label={c.name} icon={c.icon} onPress={() => router.push(`/(customer)/category/${c.slug}`)} />
+            <Chip
+              key={c.id}
+              label={c.name}
+              icon={c.icon}
+              onPress={() => router.push(`/(customer)/category/${c.slug}`)}
+            />
           ))}
         </ScrollView>
       ) : null}
@@ -44,11 +57,22 @@ export default function CategoryScreen() {
           services.data?.length ? (
             <View style={{ gap: spacing[2] }}>
               {services.data.map((s) => (
-                <ServiceCard key={s.id} service={s} variant="row" badge={s.allowsImmediate ? 'Agora' : undefined} onPress={() => router.push(`/(customer)/service/${s.slug}`)} />
+                <ServiceCard
+                  key={s.id}
+                  service={s}
+                  variant="row"
+                  badge={s.allowsImmediate ? 'Agora' : undefined}
+                  onPress={() => router.push(`/(customer)/service/${s.slug}`)}
+                />
               ))}
             </View>
           ) : (
-            <EmptyState icon="map" title="Ainda não atendemos aqui" description="Esta categoria não tem serviços na sua região por enquanto." action={{ label: 'Ver outras categorias', onPress: () => router.back() }} />
+            <EmptyState
+              icon="map"
+              title="Ainda não atendemos aqui"
+              description="Esta categoria não tem serviços na sua região por enquanto."
+              action={{ label: 'Ver outras categorias', onPress: () => router.back() }}
+            />
           )
         }
       </QueryState>

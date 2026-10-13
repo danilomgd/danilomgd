@@ -25,7 +25,16 @@ export interface SelectProps<T extends string> {
 }
 
 /** Seletor que abre uma folha inferior com as opções. */
-export function Select<T extends string>({ label, placeholder = 'Selecionar', value, options, onChange, error, disabled, extraAction }: SelectProps<T>) {
+export function Select<T extends string>({
+  label,
+  placeholder = 'Selecionar',
+  value,
+  options,
+  onChange,
+  error,
+  disabled,
+  extraAction,
+}: SelectProps<T>) {
   const { colors, radius } = useTheme();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
@@ -42,7 +51,14 @@ export function Select<T extends string>({ label, placeholder = 'Selecionar', va
         accessibilityState={{ disabled: Boolean(disabled), expanded: open }}
         disabled={disabled}
         onPress={() => setOpen(true)}
-        style={[styles.field, { borderColor: error ? colors.danger : colors.border, borderRadius: radius.md, backgroundColor: disabled ? colors.surfaceAlt : colors.surface }]}
+        style={[
+          styles.field,
+          {
+            borderColor: error ? colors.danger : colors.border,
+            borderRadius: radius.md,
+            backgroundColor: disabled ? colors.surfaceAlt : colors.surface,
+          },
+        ]}
       >
         <Text variant="body" color={selected ? 'primary' : 'muted'} style={{ flex: 1 }} numberOfLines={1}>
           {selected?.label ?? placeholder}
@@ -87,5 +103,12 @@ export function Select<T extends string>({ label, placeholder = 'Selecionar', va
 
 const styles = StyleSheet.create({
   label: { marginBottom: 6, marginTop: 2 },
-  field: { minHeight: 52, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 8 },
+  field: {
+    minHeight: 52,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 8,
+  },
 });

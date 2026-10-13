@@ -1,7 +1,7 @@
 import type { DispatchOffer, MatchingWeights, OfferResponse, UpsertMatchingConfigInput, WaveConfig } from '@velio/contracts';
 import { rooms } from '@velio/contracts';
 import { boundingBox, DEFAULT_WAVES, DEFAULT_WEIGHTS, haversineKm, planWave, rankCandidates, type ScoredCandidate } from '@velio/domain';
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, ne } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { AppContext } from '../../context';
 import { dispatchOffers, dispatchRounds, matchingConfigs } from '../../db/schema';
@@ -51,8 +51,12 @@ export function createDispatchService(
     return { ranked, total: cands.length };
   }
 
-  async function alreadyOffered(orderId: string): Promise<Set<string>> {
-    const rows = await db.select({ providerId: dispatchOffers.providerId }).from(dispatchOffers).where(eq(dispatchOffers.orderId, orderId));
+  /** Prestadores já ofertados no ciclo de matching corrente (ofertas retiradas não contam). */
+  async function alreadyOffered(orderId: string, since: Date | null): Promise<Set<string>> {
+    const rows = await db
+      .select({ providerId: dispatchOffers.providerId })
+      .from(dispatchOffers)
+      .where(and(eq(dispatchOffers.orderId, orderId), ne(dispatchOffers.response, 'WITHDRAWN'), since ? gte(dispatchOffers.offeredAt, since) : undefined));
     return new Set(rows.map((r) => r.providerId));
   }
 
@@ -73,7 +77,7 @@ export function createDispatchService(
       const wave = waves.waves[waveIndex];
       const radius = wave?.radiusKm ?? waves.waves[waves.waves.length - 1]?.radiusKm ?? 10;
       const { ranked, total } = await rankForOrder(orderId, radius);
-      const plan = planWave(waveIndex, ranked, waves, await alreadyOffered(orderId));
+      const plan = planWave(waveIndex, ranked, waves, await alreadyOffered(orderId, o.matchingStartedAt));
       if (plan.kind === 'OFFER') {
         const expiresAt = new Date(now.getTime() + plan.timeoutSeconds * 1000);
         const [round] = await db
@@ -245,7 +249,7 @@ export function createDispatchService(
       const { waves } = await configFor(o.categoryId);
       const radius = waves.waves[waves.waves.length - 1]?.radiusKm ?? 20;
       const { ranked } = await rankForOrder(orderId, radius);
-      const offered = await alreadyOffered(orderId);
+      const offered = await alreadyOffered(orderId, o.matchingStartedAt);
       const out = [];
       for (const r of ranked) {
         const p = await deps.providers.getById(r.providerId);

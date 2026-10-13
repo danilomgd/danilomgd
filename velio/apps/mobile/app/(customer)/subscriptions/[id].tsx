@@ -1,5 +1,15 @@
-import { BottomSheet, Button, CardSkeleton, ErrorState, Input, StatusPill, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  BottomSheet,
+  Button,
+  CardSkeleton,
+  ErrorState,
+  Input,
+  StatusPill,
+  Text,
+  useTheme,
+  useToast,
+} from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
@@ -48,23 +58,43 @@ export default function SubscriptionScreen() {
       {subs.isPending ? (
         <CardSkeleton height={200} />
       ) : subs.isError || !sub ? (
-        <ErrorState title="Assinatura não encontrada" description={errorMessage(subs.error)} onRetry={() => subs.refetch()} />
+        <ErrorState
+          title="Assinatura não encontrada"
+          description={errorMessage(subs.error)}
+          onRetry={() => subs.refetch()}
+        />
       ) : (
         <View style={{ gap: spacing[6] }}>
           <View style={{ gap: spacing[2] }}>
-            <StatusPill label={STATUS[sub.status]?.label ?? sub.status} tone={STATUS[sub.status]?.tone ?? 'neutral'} />
+            <StatusPill
+              label={STATUS[sub.status]?.label ?? sub.status}
+              tone={STATUS[sub.status]?.tone ?? 'neutral'}
+            />
             <Text variant="title">{sub.planName}</Text>
             {sub.status === 'PAST_DUE' ? (
-              <Button label="Atualizar pagamento" variant="secondary" size="md" onPress={() => router.push('/(customer)/account/payment-methods')} />
+              <Button
+                label="Atualizar pagamento"
+                variant="secondary"
+                size="md"
+                onPress={() => router.push('/(customer)/account/payment-methods')}
+              />
             ) : null}
           </View>
           <Section title="Visitas">
-            <KeyValue label="Próxima visita" value={sub.nextVisitDueAt ? formatDate(sub.nextVisitDueAt) : 'A agendar'} />
-            <KeyValue label="Próxima cobrança" value={sub.nextChargeAt ? formatDate(sub.nextChargeAt) : '—'} />
+            <KeyValue
+              label="Próxima visita"
+              value={sub.nextVisitDueAt ? formatDate(sub.nextVisitDueAt) : 'A agendar'}
+            />
+            <KeyValue
+              label="Próxima cobrança"
+              value={sub.nextChargeAt ? formatDate(sub.nextChargeAt) : '—'}
+            />
             <KeyValue label="Desde" value={formatDate(sub.startedAt)} />
             <KeyValue label="Equipamentos" value={`${sub.equipmentIds.length}`} />
           </Section>
-          {sub.status !== 'CANCELLED' ? <Button label="Cancelar assinatura" variant="ghost" onPress={() => setCancelOpen(true)} /> : null}
+          {sub.status !== 'CANCELLED' ? (
+            <Button label="Cancelar assinatura" variant="ghost" onPress={() => setCancelOpen(true)} />
+          ) : null}
         </View>
       )}
       <BottomSheet visible={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancelar assinatura?">
@@ -72,8 +102,20 @@ export default function SubscriptionScreen() {
           <Text variant="body" color="muted">
             As visitas futuras deixam de ser agendadas. Visitas já confirmadas permanecem.
           </Text>
-          <Input label="Motivo" value={reason} onChangeText={setReason} placeholder="Conte o motivo" maxLength={300} />
-          <Button label="Confirmar cancelamento" variant="danger" onPress={() => cancel.mutate()} loading={cancel.isPending} disabled={reason.trim().length < 3} />
+          <Input
+            label="Motivo"
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Conte o motivo"
+            maxLength={300}
+          />
+          <Button
+            label="Confirmar cancelamento"
+            variant="danger"
+            onPress={() => cancel.mutate()}
+            loading={cancel.isPending}
+            disabled={reason.trim().length < 3}
+          />
         </View>
       </BottomSheet>
     </Screen>

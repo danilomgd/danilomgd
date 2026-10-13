@@ -18,11 +18,21 @@ export function defaultOptionValues(options: ServiceOption[]): OptionValues {
 
 /** Opções obrigatórias ainda sem valor. */
 export function missingRequired(options: ServiceOption[], values: OptionValues): string[] {
-  return options.filter((o) => o.required && (values[o.key] === undefined || values[o.key] === '')).map((o) => o.label);
+  return options
+    .filter((o) => o.required && (values[o.key] === undefined || values[o.key] === ''))
+    .map((o) => o.label);
 }
 
 /** Formulário dinâmico a partir de `Service.options` (select, number, boolean, text). */
-export function ServiceOptionsForm({ options, values, onChange }: { options: ServiceOption[]; values: OptionValues; onChange: (next: OptionValues) => void }) {
+export function ServiceOptionsForm({
+  options,
+  values,
+  onChange,
+}: {
+  options: ServiceOption[];
+  values: OptionValues;
+  onChange: (next: OptionValues) => void;
+}) {
   const { spacing } = useTheme();
   if (!options.length) return null;
   const set = (key: string, value: string | number | boolean) => onChange({ ...values, [key]: value });
@@ -58,7 +68,10 @@ export function ServiceOptionsForm({ options, values, onChange }: { options: Ser
                 value={values[o.key] === undefined ? '' : String(values[o.key])}
                 onChangeText={(t) => {
                   const n = Number(t.replace(/\D/g, ''));
-                  set(o.key, t === '' ? '' : Math.min(o.max ?? Number.MAX_SAFE_INTEGER, Math.max(o.min ?? 0, n)));
+                  set(
+                    o.key,
+                    t === '' ? '' : Math.min(o.max ?? Number.MAX_SAFE_INTEGER, Math.max(o.min ?? 0, n)),
+                  );
                 }}
                 hint={o.unitPriceCents ? `${formatBRL(o.unitPriceCents)} por unidade` : undefined}
               />
@@ -74,11 +87,23 @@ export function ServiceOptionsForm({ options, values, onChange }: { options: Ser
                     </Text>
                   ) : null}
                 </View>
-                <Switch value={Boolean(values[o.key])} onValueChange={(v) => set(o.key, v)} accessibilityLabel={o.label} />
+                <Switch
+                  value={Boolean(values[o.key])}
+                  onValueChange={(v) => set(o.key, v)}
+                  accessibilityLabel={o.label}
+                />
               </View>
             );
           default:
-            return <Input key={o.key} label={o.label} value={String(values[o.key] ?? '')} onChangeText={(t) => set(o.key, t)} placeholder={o.required ? undefined : 'Opcional'} />;
+            return (
+              <Input
+                key={o.key}
+                label={o.label}
+                value={String(values[o.key] ?? '')}
+                onChangeText={(t) => set(o.key, t)}
+                placeholder={o.required ? undefined : 'Opcional'}
+              />
+            );
         }
       })}
     </View>

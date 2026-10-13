@@ -51,10 +51,24 @@ export function buildTimeline(
         prev.at = e.createdAt;
         continue;
       }
-      nodes.push({ key: e.id, status: e.toStatus, label: labels.label, description: labels[audience], at: e.createdAt, current: false });
+      nodes.push({
+        key: e.id,
+        status: e.toStatus,
+        label: labels.label,
+        description: labels[audience],
+        at: e.createdAt,
+        current: false,
+      });
     } else if (includeNonTransitions) {
       const text = typeof e.payload.message === 'string' ? e.payload.message : null;
-      nodes.push({ key: e.id, status: null, label: humanizeEventType(e.type), description: text, at: e.createdAt, current: false });
+      nodes.push({
+        key: e.id,
+        status: null,
+        label: humanizeEventType(e.type),
+        description: text,
+        at: e.createdAt,
+        current: false,
+      });
     }
   }
   const last = nodes[nodes.length - 1];
@@ -77,7 +91,12 @@ function humanizeEventType(type: string): string {
 }
 
 /** Linha do tempo da ordem. Lê somente `order_events` e rótulos de `contracts`. */
-export function OrderStatusTimeline({ events, audience = 'customer', variant = 'vertical', includeNonTransitions }: OrderStatusTimelineProps) {
+export function OrderStatusTimeline({
+  events,
+  audience = 'customer',
+  variant = 'vertical',
+  includeNonTransitions,
+}: OrderStatusTimelineProps) {
   const { colors } = useTheme();
   const nodes = buildTimeline(events, audience, includeNonTransitions);
 
@@ -85,7 +104,10 @@ export function OrderStatusTimeline({ events, audience = 'customer', variant = '
     return (
       <View style={styles.miniRow} accessibilityLabel={`${nodes.length} etapas concluídas`}>
         {nodes.slice(-3).map((n) => (
-          <View key={n.key} style={[styles.miniDot, { backgroundColor: n.current ? colors.primary : colors.border }]} />
+          <View
+            key={n.key}
+            style={[styles.miniDot, { backgroundColor: n.current ? colors.primary : colors.border }]}
+          />
         ))}
       </View>
     );
@@ -96,7 +118,11 @@ export function OrderStatusTimeline({ events, audience = 'customer', variant = '
       {nodes.map((n, i) => {
         const isLast = i === nodes.length - 1;
         return (
-          <View key={n.key} style={styles.row} accessibilityLabel={`Etapa ${i + 1} de ${nodes.length}: ${n.label}, ${formatTime(n.at)}`}>
+          <View
+            key={n.key}
+            style={styles.row}
+            accessibilityLabel={`Etapa ${i + 1} de ${nodes.length}: ${n.label}, ${formatTime(n.at)}`}
+          >
             <View style={styles.timeCol}>
               <Text variant="caption" color="muted">
                 {formatTime(n.at)}
@@ -139,7 +165,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12, minHeight: 56 },
   timeCol: { width: 48, alignItems: 'flex-end', paddingTop: 2 },
   railCol: { width: 16, alignItems: 'center' },
-  dot: { width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
+  dot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 3,
+  },
   rail: { flex: 1, width: 2, marginVertical: 4 },
   content: { flex: 1, paddingBottom: 16, gap: 2 },
   miniRow: { flexDirection: 'row', gap: 6 },

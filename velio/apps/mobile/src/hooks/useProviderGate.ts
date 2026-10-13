@@ -1,5 +1,5 @@
-import type { ProviderMe } from '@velio/contracts';
 import { useQuery } from '@tanstack/react-query';
+import type { ProviderMe } from '@velio/contracts';
 import { api } from '@/lib/api';
 import { isNotFound } from '@/lib/errors';
 import { qk } from '@/lib/query';

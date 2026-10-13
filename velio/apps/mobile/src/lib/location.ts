@@ -53,7 +53,8 @@ export class ProviderLocationTracker {
   /** Recalcula o intervalo e (re)inicia ou para o watcher conforme necessário. */
   async update(state: ProviderTrackingState): Promise<void> {
     this.state = state;
-    const distanceToTargetKm = state.target && this.lastPosition ? haversineKm(this.lastPosition, state.target) : null;
+    const distanceToTargetKm =
+      state.target && this.lastPosition ? haversineKm(this.lastPosition, state.target) : null;
     const interval = locationIntervalSeconds({
       availability: state.availability,
       activeOrderStatus: state.activeOrderStatus,

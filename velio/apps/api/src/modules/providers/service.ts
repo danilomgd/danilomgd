@@ -9,7 +9,7 @@ import type {
 } from '@velio/contracts';
 import { rooms } from '@velio/contracts';
 import { acceptPing, estimateEtaMinutes, haversineKm, type MatchCandidate } from '@velio/domain';
-import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { AppContext } from '../../context';
 import { providerDocuments, providerLocations, providerSchedules, providerSkills, providers } from '../../db/schema';
@@ -269,7 +269,7 @@ export function createProvidersService(
       const rows = await db
         .select({ p: providers, level: providerSkills.level })
         .from(providers)
-        .innerJoin(providerSkills, and(eq(providerSkills.providerId, providers.id), eq(providerSkills.categoryId, input.categoryId)))
+        .innerJoin(providerSkills, and(eq(providerSkills.providerId, sql`${providers.id}::text`), eq(providerSkills.categoryId, input.categoryId)))
         .where(
           and(
             eq(providers.status, 'APPROVED'),

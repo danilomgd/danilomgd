@@ -20,7 +20,7 @@ Legenda LGPD: **P** dado pessoal; **S** dado pessoal sensível (art. 5º, II); *
 | JSON | `jsonb` tipado no Drizzle (`$type<...>`) para configuração, payloads e snapshots; nunca para dados que precisem de índice relacional | — |
 | Soft delete | `deleted_at` em `addresses`, `vehicles`, `equipments`, `payment_methods`. Demais tabelas não apagam: usam `status`, `active`, `hidden_at` ou `revoked_at` | — |
 | Concorrência otimista | `service_orders.version` (incrementado a cada transição; `UPDATE ... WHERE version = ?`) | ADR-005 |
-| Idempotência | `service_requests(customer_id, idempotency_key)` único; `payment_intents.idempotency_key` único; `webhook_events(gateway, external_id)` único; `scheduled_jobs.dedupe_key` único | ADR-007/012 |
+| Idempotência | `service_requests(customer_id, idempotency_key)` único (reenvio devolve a ordem existente); `webhook_events(gateway, external_id)` único; `scheduled_jobs.dedupe_key` único com `ON CONFLICT DO NOTHING`. `payment_intents.idempotency_key` é único, mas `payments/service.ts` grava `${orderId}:INITIAL:${timestamp}` (a idempotência real da autorização vem de `authorizeForOrder` verificar intent viva antes de criar outra) | ADR-007/012 |
 | Outbox | `domain_events` gravado na mesma transação da mudança; despachado por `platform/outbox.ts` | ADR-009 |
 
 ### 1.2 Mapa módulo → tabelas
@@ -348,7 +348,7 @@ erDiagram
 | base_lat, base_lng | double precision | sim | | Ponto base declarado no onboarding | G |
 | base_city, base_state | varchar(120), varchar(2) | sim | | | P |
 | service_radius_km | real | não | 15 | Raio máximo que aceita (1–100) | — |
-| last_lat, last_lng | double precision | sim | | Última posição aceita (`acceptPing`); usada no matching | G |
+| last_lat, last_lng | double precision | sim | | Última posição aceita (`acceptPing`); inicializada com `base_*` no onboarding para que o prestador seja candidato antes do primeiro ping; `findCandidates` filtra só por `last_*` | G |
 | last_location_at | timestamptz | sim | | | G |
 | rating_avg | real | sim | | Média ponderada por recência (`recencyWeightedRating`) | — |
 | rating_count, completed_count | integer | não | 0 | | — |
@@ -498,16 +498,16 @@ erDiagram
 | discount_cents | integer | não | 0 | Cupom/crédito | F |
 | total_cents | integer | sim | | `price + additional − discount` (fixado em `COMPLETED`) | F |
 | platform_fee_cents, provider_payout_cents | integer | sim | | Resultado de `settle` em `COMPLETED` | F |
-| start_pin | varchar(4) | sim | | PIN de início (`pinFromBytes`); exibido só ao cliente; nunca no payload do prestador | PS |
-| custody_code | varchar(24) | sim | | Código QR do item/veículo (LOGISTICS/LAUNDRY) | — |
+| start_pin | varchar(4) | sim | | PIN de início (`pinFromBytes(randomBytes(4))`) quando `flags.requiresStartPin`; `toDto` só o devolve para `viewer.type ∈ {customer, operator}`; nunca para o prestador | PS |
+| custody_code | varchar(24) | sim | | Código do item/veículo gerado por `shortCode(6, 'VL-')` (`VL-` + 6 caracteres sem 0/O/1/I) quando `requiresCustody = cfg.requiresCustody \|\| kind = LAUNDRY \|\| (kind = LOGISTICS e há veículo)`; o scan também aceita a placa do veículo | — |
 | notes | text | sim | | | P |
 | cancel_reason | text | sim | | | P |
 | cancelled_by | varchar(20) | sim | | `customer`, `provider`, `platform` | — |
 | cancellation_fee_cents | integer | sim | | `customerCancellation().feeCents` | F |
 | accepted_at, started_at, completed_at, cancelled_at, matching_started_at | timestamptz | sim | | Marcos para métricas (tempo de matching = `accepted_at − matching_started_at`) | — |
 | dispatch_wave | integer | não | 0 | Onda corrente (0-based) | — |
-| flags | jsonb | não | ver DDL | `{ requiresStartPin, requiresBeforeAfterPhotos, requiresCustody, requiresVehicleHandover, allowsAdditionalQuote }` congelados da categoria na criação; alimentam `OrderSnapshot` | — |
-| metadata | jsonb | não | `'{}'` | Extensões (ids de intents, planos) | — |
+| flags | jsonb | não | ver DDL | `{ requiresStartPin, requiresBeforeAfterPhotos, requiresCustody, requiresVehicleHandover (= LOGISTICS com veículo), allowsAdditionalQuote }` congelados na criação (`orders/service.ts: createRequest`); alimentam `OrderSnapshot` | — |
+| metadata | jsonb | não | `'{}'` | `OrderMetadata` (`orders/types.ts`): `paymentMethodId`, `paymentMethodKind`, `awaitingPixPayment`, `billedViaParent` (filha de concierge), `coveredByPlan` (visita de assinatura), `subscriptionId`, `excludedProviderIds` (quem cancelou), `vehicleId`, `vehiclePlate`, `equipmentIds`, `neighborhood`, `city`, `estimate {min,max,model}`, `disputeHeldCents`. Nunca exposto diretamente | P (bairro/cidade) |
 | version | integer | não | 0 | Lock otimista | — |
 | created_at, updated_at | timestamptz | não | now() | | — |
 
@@ -520,15 +520,15 @@ erDiagram
 | id | uuid | não | uuid v7 | | — |
 | order_id | text | não | | | — |
 | seq | integer | não | | Monotônico por ordem (1, 2, 3...) | — |
-| type | varchar(60) | não | | `TRANSITION`, `QUOTE_SENT`, `OFFER_EXPIRED`, `NOTE`, `ADJUSTMENT`... | — |
-| action | varchar(60) | sim | | `TransitionAction` quando `type = TRANSITION` | — |
-| from_status, to_status | varchar(30) | sim | | | — |
+| type | varchar(60) | não | | `order.created`, `order.transitioned`, `evidence.added`, `custody.scanned`, `vehicle.handover`, `quote.created`, `quote.decided`, `effect.failed` (efeito pós-commit que falhou, com nome e erro) | — |
+| action | varchar(60) | sim | | `TransitionAction` quando `type = order.transitioned` | — |
+| from_status, to_status | varchar(30) | sim | | `order.created` tem só `to_status = initial` | — |
 | actor_type | varchar(20) | não | | `customer`, `provider`, `operator`, `system` | — |
-| actor_id | text | sim | | user_id do ator | P |
-| payload | jsonb | não | `'{}'` | Sem PIN, sem dados de cartão; `pin` é removido antes de gravar | — |
+| actor_id | text | sim | | `provider_id` quando o ator é prestador; `user_id` nos demais (`appendEvent`) | P |
+| payload | jsonb | não | `'{}'` | `pin` e `customerConfirmationPin` são removidos antes de gravar (`transitionTx`) | — |
 | created_at | timestamptz | não | now() | | — |
 
-Índice: `order_events_seq_uq` UNIQUE(order_id, seq) — garante append-only sem buracos; a inserção usa `seq = (SELECT max(seq)+1)` dentro da mesma transação do `UPDATE service_orders ... WHERE version = ?`. Tabela imutável: nenhum UPDATE/DELETE pela aplicação.
+Índice: `order_events_seq_uq` UNIQUE(order_id, seq) — garante append-only sem buracos; `nextSeq = max(seq)+1` dentro da mesma transação do `UPDATE service_orders ... WHERE version = ?` (e `SELECT ... FOR UPDATE` quando o driver é Postgres; PGlite roda sem lock de linha). Tabela imutável: nenhum UPDATE/DELETE pela aplicação.
 
 ### 5.4 `order_tasks`
 
@@ -582,16 +582,16 @@ erDiagram
 |---|---|---|---|---|---|
 | id | uuid | não | uuid v7 | | — |
 | order_id | text | não | | | — |
-| item_code | varchar(40) | não | | QR do saco/lacre ou placa do veículo | — |
-| step | varchar(30) | não | | `PICKED_UP`, `AT_DESTINATION`, `RETURN_PICKUP`, `DELIVERED` | — |
-| from_party, to_party | varchar(30) | não | | `customer`, `provider`, `third_party` | — |
+| item_code | varchar(40) | não | | `custody_code` (`VL-XXXXXX`) ou placa do veículo, normalizado em maiúsculas | — |
+| step | varchar(30) | não | | **Status da ordem no momento do scan** (não o destino): `EN_ROUTE_PICKUP` (coleta), `IN_TRANSIT` (chegada ao destino), `THIRD_PARTY_DONE` (nova coleta), `RETURNING` (devolução). O guard `requiresCustodyScan` procura `step = status atual` | — |
+| from_party, to_party | varchar(30) | não | | `CUSTODY_PARTIES` em `orders/service.ts`: `EN_ROUTE_PICKUP/DRIVER_ASSIGNED → CUSTOMER>PROVIDER`, `IN_TRANSIT → PROVIDER>THIRD_PARTY`, `THIRD_PARTY_DONE → THIRD_PARTY>PROVIDER`, `RETURNING → PROVIDER>CUSTOMER`; fora do mapa `PROVIDER>PROVIDER` | — |
 | by_user_id | text | não | | Quem escaneou | P |
 | lat, lng | double precision | sim | | Onde | G |
 | photo_url | text | sim | | | P |
 | note | text | sim | | | — |
 | created_at | timestamptz | não | now() | | — |
 
-Índice: `custody_order_idx (order_id, created_at)`. Define `custodyScannedForCurrentStep` (existe evento para `step = status atual` após a última transição).
+Índice: `custody_order_idx (order_id, created_at)`. Define `custodyScannedForCurrentStep` (existe evento para `step = status atual`). Scan duplicado na mesma etapa é ignorado; código divergente → 422 "Código não corresponde ao item desta ordem". O efeito `custody.record` preenche a etapa anterior se faltar (ex.: `provider.arrive_destination`, que não exige scan). Cenário D verifica exatamente 4 eventos: `EN_ROUTE_PICKUP:CUSTOMER>PROVIDER`, `IN_TRANSIT:PROVIDER>THIRD_PARTY`, `THIRD_PARTY_DONE:THIRD_PARTY>PROVIDER`, `RETURNING:PROVIDER>CUSTOMER`.
 
 ### 5.8 `vehicle_handovers`
 
@@ -604,11 +604,11 @@ erDiagram
 | fuel_level_pct | integer | sim | | 0–100 | — |
 | checklist | jsonb | não | `'{}'` | `{ "riscos_lateral": false, ... }` | — |
 | photo_urls | jsonb | não | `'[]'` | Mínimo 1 | P |
-| customer_confirmed | text | sim | | Registro da confirmação por PIN do cliente (ver §1.5) | — |
+| customer_confirmed | text | sim | | ISO do instante em que `customerConfirmationPin` bateu com `start_pin` (`vehicleHandover`); PIN errado → 422. Tipo deveria ser `timestamptz` (§1.5) | — |
 | by_user_id | text | não | | | P |
 | created_at | timestamptz | não | now() | | — |
 
-Índice: `vehicle_handovers_order_idx (order_id)`. Define `vehicleHandoverRecorded`.
+Índice: `vehicle_handovers_order_idx (order_id)`. Define `vehicleHandoverRecorded` (`step = PICKUP` até `IN_TRANSIT`; `DELIVERY` em `RETURN_PICKUP`/`RETURNING`). Cada `photo_urls[i]` também vira `media_evidence(kind = step)`, satisfazendo `requiresEvidence:PICKUP/DELIVERY`. 422 se `flags.requiresVehicleHandover = false`.
 
 ### 5.9 `quotes`
 
@@ -625,7 +625,7 @@ erDiagram
 | decided_at, decided_by_user_id | timestamptz, text | sim | | | P |
 | created_at | timestamptz | não | now() | | — |
 
-Índice: `quotes_order_idx (order_id, status)` — guards `noOpenAdditionalQuote`, `hasSentQuote`, `hasApprovedQuote`. Regra de ouro (ADR-007): `payment_intents(kind=ADDITIONAL)` só nasce com `quotes.status = APPROVED`; recomenda-se trigger/constraint em V1.
+Índice: `quotes_order_idx (order_id, status)` — guards `noOpenAdditionalQuote`, `hasSentQuote`, `hasApprovedQuote`. `quotes/service.ts`: `INITIAL` só em `UNDER_REVIEW`/`QUOTE_REJECTED` (QUOTE) ou `PLAN_APPROVED` (CONCIERGE, `provider_id = 'platform'` quando criado pelo sistema); `ADDITIONAL` só em `IN_PROGRESS`, `AT_DESTINATION`, `THIRD_PARTY_IN_PROGRESS`, `THIRD_PARTY_DONE`; um `SENT` por `kind` por ordem (409); `amount_cents = Σ round(quantity × unitPriceCents)`; expiração do adicional limitada por `settings.quotes.additionalQuoteExpiresMinutes`. Regra de ouro (ADR-007): `payment_intents(kind=ADDITIONAL, quote_id)` só nasce em `approve()` após `status = APPROVED`; recomenda-se constraint em V1.
 
 ### 5.10 `workflow_definitions`
 
@@ -792,7 +792,7 @@ erDiagram
 |---|---|---|---|---|---|
 | id | uuid | não | uuid v7 | | — |
 | owner_type | varchar(10) | não | | `USER`, `PROVIDER`, `PLATFORM` | — |
-| owner_id | text | não | | user_id, provider_id ou chave fixa (`revenue`, `clearing`, `promo`) | P |
+| owner_id | text | não | | user_id, provider_id ou chave fixa da plataforma (`wallet/service.ts`): `clearing` (valores cobrados do cliente em trânsito no gateway; saldo negativo = a receber do gateway), `revenue` (comissão líquida), `payouts_payable` (repasses agendados a pagar) | P |
 | currency | varchar(3) | não | `'BRL'` | | — |
 | balance_cents | integer | não | 0 | Saldo materializado = Σ créditos − Σ débitos (recalculável) | F |
 | held_cents | integer | não | 0 | Em disputa (`wallet.hold`) | F |
@@ -809,12 +809,12 @@ erDiagram
 | journal_id | text | não | | Agrupa os lançamentos de uma operação; Σ CREDIT = Σ DEBIT por journal | — |
 | direction | varchar(6) | não | | `CREDIT` ou `DEBIT` | — |
 | amount_cents | integer | não | | Sempre positivo | F |
-| kind | varchar(30) | não | | `ORDER_GROSS`, `PLATFORM_FEE`, `PROVIDER_EARNING`, `COUPON_COST`, `CANCELLATION_FEE`, `REFUND`, `DISPUTE_HOLD`, `DISPUTE_RELEASE`, `PAYOUT`, `WALLET_TOPUP`, `WALLET_SPEND` | — |
+| kind | varchar(30) | não | | Minúsculas (`wallet/service.ts`): `order_charge` (DEBIT clearing), `provider_payout` (CREDIT prestador), `platform_fee` (CREDIT revenue = cobrado − repasse), `provider_payout_funding` (DEBIT revenue, filha de concierge), `cancellation_fee_charge`/`cancellation_fee`, `wallet_payment`, `customer_credit`, `payout`, `dispute_hold`, `dispute_release`, `dispute_adjustment` | — |
 | order_id, intent_id, payout_id | text | sim | | Rastreabilidade | — |
 | description | text | não | | Texto exibido no extrato | — |
 | created_at | timestamptz | não | now() | | — |
 
-Índices: `ledger_account_idx (account_id, created_at)` (extrato paginado); `ledger_order_idx (order_id)` (conciliação por ordem); `ledger_journal_idx (journal_id)` (verificação de balanceamento). Tabela append-only.
+Índices: `ledger_account_idx (account_id, created_at)` (extrato paginado); `ledger_order_idx (order_id)` (conciliação por ordem; `settleOrder` é idempotente por existir `provider_payout` da ordem); `ledger_journal_idx (journal_id)` (verificação de balanceamento). Tabela append-only. `journal()` rejeita lançamentos desbalanceados e atualiza `balance_cents` na mesma chamada. Exceção documentada: `hold`, `releaseHold` gravam lançamentos **de entrada única** (movem `balance_cents ↔ held_cents` da mesma conta ou ajustam `revenue`); a verificação de balanceamento deve ignorar `kind IN ('dispute_hold','dispute_release','dispute_adjustment')` ou esses lançamentos devem ganhar contrapartida em V1.
 
 ### 7.7 `payouts`
 
@@ -886,10 +886,10 @@ erDiagram
 
 | Tabela | Colunas | Observações |
 |---|---|---|
-| `conversations` | `id`, `order_id` (nulo para suporte sem ordem), `kind` (`ORDER`, `SUPPORT`), `last_message_at`, `closed_at`, `created_at` | `conversations_order_kind_uq` UNIQUE(order_id, kind). `closed_at` = `COMPLETED + 48 h` (job) |
-| `conversation_participants` | `id`, `conversation_id NN`, `user_id NN`, `role` (`customer`,`provider`,`operator`), `last_read_at` | `participants_uq` UNIQUE(conversation_id, user_id); `participants_user_idx (user_id)`. Mascaramento: nomes exibidos vêm de `display_name`/primeiro nome; telefone nunca é enviado |
-| `messages` | `id`, `conversation_id NN`, `sender_type` (`customer`,`provider`,`operator`,`system`), `sender_user_id`, `body`, `media_url`, `system_kind` (ex.: `status:EN_ROUTE`), `created_at` | `messages_conversation_idx (conversation_id, created_at)`. LGPD: P; conteúdo passa por filtro de palavras-chave (telefone, "pix direto") para revisão |
-| `notifications` | `id`, `user_id NN`, `kind` (`NotificationKind`), `channel` (`PUSH`,`INAPP`,`SMS`), `title`, `body`, `data jsonb`, `status` (`PENDING`,`SENT`,`FAILED`,`READ`), `sent_at`, `read_at`, `error`, `created_at` | `notifications_user_idx (user_id, created_at)`. `data` carrega só ids e deep link |
+| `conversations` | `id`, `order_id` (nulo para suporte), `kind` (`CUSTOMER_PROVIDER` por ordem; `CUSTOMER_SUPPORT` por ticket), `last_message_at`, `closed_at`, `created_at` | `conversations_order_kind_uq` UNIQUE(order_id, kind). Criada sob demanda por `ensureOrderConversation` (primeira mensagem de sistema). `closed_at` → 409 "Conversa encerrada"; o job de fechamento 48 h após `COMPLETED` ainda não existe (previsto) |
+| `conversation_participants` | `id`, `conversation_id NN`, `user_id NN`, `role` (`customer`,`provider`,`operator`), `last_read_at` | `participants_uq` UNIQUE(conversation_id, user_id); `participants_user_idx (user_id)`. Sincronizados a partir de `orderParticipants` (cliente + usuário do prestador); operador/admin falam sem ser participante (`sender_type = operator`). Telefone nunca é enviado |
+| `messages` | `id`, `conversation_id NN`, `sender_type` (`customer`,`provider`,`operator`,`system`), `sender_user_id`, `body`, `media_url`, `system_kind` (status da ordem em `chat.systemMessage`, `quote_additional`, `ticket_order_link`), `created_at` | `messages_conversation_idx (conversation_id, created_at)`; leitura limitada a 200. LGPD: P. Filtro de palavras-chave e rate limit por conversa: previstos, não implementados |
+| `notifications` | `id`, `user_id NN`, `kind` (`NotificationKind`), `channel` (`PUSH`,`INAPP`,`SMS`), `title`, `body`, `data jsonb`, `status` (`PENDING`,`SENT`,`FAILED`), `sent_at`, `read_at`, `error`, `created_at` | `notifications_user_idx (user_id, created_at)`. `notifyUser` grava sempre uma linha `INAPP` (`SENT`) e, havendo `devices` ativos, uma linha `PUSH` por envio (`SENT`/`FAILED`); textos pt-BR em `TEMPLATES` (`communication/service.ts`). `data` carrega só ids |
 
 ## 10. Módulos reputation, support e ops (`support.ts`)
 
@@ -939,7 +939,7 @@ Uso restrito: nunca exposto a prestador nem usado para recusar serviço por cara
 |---|---|---|
 | `support_tickets` | `id`, `user_id NN`, `order_id`, `conversation_id NN`, `subject`, `kind` (`QUESTION`,`COMPLAINT`,`REPORT_USER`,`PAYMENT`,`OTHER`), `status` (`OPEN`,`IN_PROGRESS`,`WAITING_USER`,`RESOLVED`,`CLOSED`), `priority` (`LOW`,`NORMAL`,`HIGH`,`URGENT`), `assignee_user_id`, `resolved_at`, timestamps | `tickets_user_idx (user_id)`, `tickets_status_idx (status, priority)` (fila ops) |
 | `disputes` | `id`, `order_id NN`, `opened_by_user_id NN`, `reason` (`NOT_DONE`,`POOR_QUALITY`,`DAMAGE`,`OVERCHARGE`,`OTHER`), `description NN`, `evidence_urls jsonb []`, `status` (`OPEN`,`UNDER_REVIEW`,`RESOLVED_CUSTOMER`,`RESOLVED_PROVIDER`,`RESOLVED_SPLIT`,`REJECTED`), `resolution jsonb {refundCents, providerPayoutCents, note}`, `resolved_by_user_id`, `resolved_at`, timestamps | `disputes_order_uq` UNIQUE(order_id) — uma disputa por ordem. Abertura dispara `wallet.hold` |
-| `incidents` | `id`, `order_id`, `kind` (`SLA_BREACH`,`NO_PROVIDER`,`PAYMENT_FAILURE`,`WEBHOOK_FAILURE`,`JOB_BACKLOG`,`SAFETY`,`OTHER`), `severity` (`LOW`,`MEDIUM`,`HIGH`,`CRITICAL`), `title`, `details jsonb`, `status` (`OPEN`,`ACK`,`RESOLVED`), `assignee_user_id`, `resolved_at`, timestamps | `incidents_status_idx (status, created_at)`, `incidents_order_idx (order_id)` |
+| `incidents` | `id`, `order_id`, `kind` (emitidos hoje: `NO_PROVIDER`, `NEEDS_HUMAN`, `DISPUTE` pelos efeitos `ops.alert:*`; `PAYMENT` por `payments/service.ts`; previstos: `SLA_BREACH`, `WEBHOOK_FAILURE`, `JOB_BACKLOG`, `SAFETY`), `severity` (`LOW`,`MEDIUM`,`HIGH`,`URGENT`), `title`, `details jsonb`, `status` (`OPEN`,`RESOLVED`), `assignee_user_id`, `resolved_at`, timestamps | `incidents_status_idx (status, created_at)`, `incidents_order_idx (order_id)`. `createIncident` publica `ops.order_needs_attention` no outbox quando há `order_id`; incidentes `DISPUTE` são resolvidos automaticamente em `resolveDispute` |
 
 ## 11. Módulos concierge, admin, analytics e platform (`platform.ts`)
 
@@ -1001,8 +1001,8 @@ erDiagram
 | Coluna | Tipo | Nulo | Padrão | Descrição |
 |---|---|---|---|---|
 | id | uuid | não | uuid v7 | |
-| type | varchar(60) | não | | `order.transitioned`, `offer.created`, `payment.updated`, `message.created`, `quote.created`, `quote.decided`, `notification.created`, `provider.location` ... |
-| aggregate_type, aggregate_id | varchar(40), text | não | | `order`, `payment_intent`, `conversation`, `provider` |
+| type | varchar(60) | não | | Emitidos pelos módulos: `order.created`, `order.transitioned`, `offer.created`, `offer.expired`, `payment.updated`, `provider.location`, `message.created`, `notification.created`, `quote.created`, `quote.decided`, `ops.order_needs_attention`. Cada módulo assina os seus em `registerRealtime()` |
+| aggregate_type, aggregate_id | varchar(40), text | não | | `order`, `offer`, `payment_intent`, `conversation`, `user` |
 | payload | jsonb | não | `'{}'` | Dados mínimos para o handler (ids, status); o handler relê o agregado |
 | created_at | timestamptz | não | now() | |
 | dispatched_at | timestamptz | sim | | NULL = pendente |
@@ -1016,14 +1016,14 @@ erDiagram
 | Coluna | Tipo | Nulo | Padrão | Descrição |
 |---|---|---|---|---|
 | id | uuid | não | uuid v7 | |
-| kind | varchar(60) | não | | `dispatch.start`, `dispatch.wave_timeout`, `offer.expire`, `booking.reminder`, `booking.confirm_request`, `subscription.generate_visit`, `subscription.charge`, `payment.reconcile`, `payout.batch`, `order.auto_complete_check`, `quote.expire`, `location.purge`, `sla.escalate` |
-| payload | jsonb | não | `'{}'` | Só ids |
+| kind | varchar(60) | não | | Registrados hoje (`modules/*/index.ts`, `registry.ts`): `dispatch.start`, `dispatch.wave_timeout`, `offer.expire`, `booking.remind`, `order.auto_close`, `payment.pix_timeout`, `quote.expire`, `concierge.plan`, `subscription.generate_visit`, `subscription.charge`, `payout.batch`. Previstos (sem handler ainda): `payment.reconcile`, `location.purge`, `sla.escalate`, `conversation.close` |
+| payload | jsonb | não | `'{}'` | Só ids (`orderId`, `roundId`, `offerId`, `quoteId`, `intentId`, `subscriptionId`, `dueAt`, `hours`, `cadence`) |
 | run_at | timestamptz | não | | |
 | status | varchar(12) | não | `'PENDING'` | `PENDING`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED` |
 | attempts, max_attempts | integer | não | 0, 5 | Backoff `min(60 s × attempts, 600 s)` |
 | locked_by, locked_at | text, timestamptz | sim | | `w-{pid}-{rand}`; lock otimista via `UPDATE ... WHERE status = 'PENDING'` |
 | last_error | text | sim | | |
-| dedupe_key | varchar(120) | sim | | `reminder:{orderId}:24h`, `wave:{orderId}:{wave}`, `quote.expire:{quoteId}`; `ON CONFLICT DO NOTHING` |
+| dedupe_key | varchar(120) | sim | | `dispatch.start:{orderId}`, `dispatch.wave_timeout:{roundId}`, `booking.remind:{orderId}:{24\|1}h`, `order.auto_close:{orderId}`, `payment.pix_timeout:{orderId}`, `quote.expire:{quoteId}`, `concierge.plan:{orderId}`, `subscription.generate_visit:{subId}:{dueAt}`, `subscription.charge:{subId}:{runAt}`, `payout.batch:{YYYY-MM-DD}`; `ON CONFLICT DO NOTHING`; `cancelByDedupe` marca `CANCELLED` |
 | created_at, updated_at | timestamptz | não | now() | |
 
 Índices: `scheduled_jobs_due_idx (status, run_at)`; `scheduled_jobs_dedupe_uq` UNIQUE(dedupe_key).
@@ -1057,6 +1057,8 @@ erDiagram
 | 0001 (proposta) | Corrigir §1.5; adicionar `CHECK (seq > 0)` em `order_events`; `CHECK (amount_cents > 0)` em `ledger_entries`; constraint parcial `UNIQUE (order_id) WHERE kind = 'INITIAL' AND status IN ('AUTHORIZED','CAPTURED')` em `payment_intents` |
 
 ## 13. Retenção e anonimização
+
+Política-alvo. Nenhum dos jobs de expurgo abaixo existe ainda no scheduler (ver §11.5); são pré-requisito de produção listados em `14_SECURITY_LGPD.md §13`.
 
 | Dado | Retenção | Mecanismo | Base |
 |---|---|---|---|

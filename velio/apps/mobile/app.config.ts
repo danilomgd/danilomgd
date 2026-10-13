@@ -47,8 +47,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: variant.icon,
   scheme: variant.scheme,
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
-  splash: { image: variant.splash, resizeMode: 'contain', backgroundColor: variant.splashBg },
   ios: {
     bundleIdentifier: variant.bundleId,
     supportsTablet: false,
@@ -72,7 +70,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: variant.bundleId,
     adaptiveIcon: { foregroundImage: variant.adaptiveIcon, backgroundColor: variant.splashBg },
     permissions: isProvider
-      ? ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_LOCATION', 'CAMERA', 'VIBRATE', 'POST_NOTIFICATIONS']
+      ? [
+          'ACCESS_COARSE_LOCATION',
+          'ACCESS_FINE_LOCATION',
+          'ACCESS_BACKGROUND_LOCATION',
+          'FOREGROUND_SERVICE',
+          'FOREGROUND_SERVICE_LOCATION',
+          'CAMERA',
+          'VIBRATE',
+          'POST_NOTIFICATIONS',
+        ]
       : ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'VIBRATE', 'POST_NOTIFICATIONS'],
     intentFilters: [
       {
@@ -97,14 +104,28 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         locationAlwaysAndWhenInUsePermission: isProvider
           ? 'Informamos sua posição ao cliente apenas durante um atendimento ativo.'
           : undefined,
-        locationWhenInUsePermission: 'Usamos sua localização para mostrar serviços e profissionais perto de você.',
+        locationWhenInUsePermission:
+          'Usamos sua localização para mostrar serviços e profissionais perto de você.',
         isAndroidBackgroundLocationEnabled: isProvider,
       },
     ],
-    ['expo-notifications', { icon: variant.adaptiveIcon, color: variant.splashBg, defaultChannel: isProvider ? 'offers' : 'orders' }],
-    ['expo-image-picker', { photosPermission: 'Para anexar fotos.', cameraPermission: 'Para registrar fotos do serviço.' }],
+    [
+      'expo-notifications',
+      {
+        icon: variant.adaptiveIcon,
+        color: variant.splashBg,
+        defaultChannel: isProvider ? 'offers' : 'orders',
+      },
+    ],
+    [
+      'expo-image-picker',
+      { photosPermission: 'Para anexar fotos.', cameraPermission: 'Para registrar fotos do serviço.' },
+    ],
     ['expo-camera', { cameraPermission: 'Para ler códigos de custódia e registrar fotos.' }],
-    'expo-splash-screen',
+    [
+      'expo-splash-screen',
+      { image: variant.splash, imageWidth: 200, resizeMode: 'contain', backgroundColor: variant.splashBg },
+    ],
   ],
   experiments: { typedRoutes: false },
   extra: {

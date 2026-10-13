@@ -28,7 +28,14 @@ export function formatSignedBRL(cents: number, kind: PriceLine['kind']): string 
 }
 
 /** Linhas de valor com total em destaque. Valores em centavos → `formatBRL`. */
-export function PriceSummary({ lines, totalCents, totalLabel = 'Total', rangeCents, note, variant = 'full' }: PriceSummaryProps) {
+export function PriceSummary({
+  lines,
+  totalCents,
+  totalLabel = 'Total',
+  rangeCents,
+  note,
+  variant = 'full',
+}: PriceSummaryProps) {
   const { colors } = useTheme();
   const totalText =
     totalCents != null
@@ -52,12 +59,17 @@ export function PriceSummary({ lines, totalCents, totalLabel = 'Total', rangeCen
   return (
     <View accessibilityLabel={`${totalLabel}: ${totalText}`}>
       {lines.map((l, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: linhas estáticas por render
         <View key={`${l.label}-${i}`} style={styles.line}>
           <Text variant="body" color="muted" style={{ flex: 1 }}>
             {l.label}
           </Text>
           <Text variant="mono" color={l.kind === 'discount' ? 'success' : l.pending ? 'muted' : 'primary'}>
-            {l.amountCents == null ? (l.pending ? 'sob orçamento' : '—') : formatSignedBRL(l.amountCents, l.kind)}
+            {l.amountCents == null
+              ? l.pending
+                ? 'sob orçamento'
+                : '—'
+              : formatSignedBRL(l.amountCents, l.kind)}
           </Text>
         </View>
       ))}
@@ -79,7 +91,13 @@ export function PriceSummary({ lines, totalCents, totalLabel = 'Total', rangeCen
 
 const styles = StyleSheet.create({
   inline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 32, gap: 12 },
+  line: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 32,
+    gap: 12,
+  },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: 8 },
   total: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 40 },
   note: { marginTop: 6 },

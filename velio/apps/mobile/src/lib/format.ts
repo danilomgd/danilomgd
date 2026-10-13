@@ -10,7 +10,10 @@ export function normalizePhoneBR(input: string): string | null {
 
 /** Máscara visual (11) 98765-4321 enquanto o usuário digita. */
 export function maskPhoneBR(input: string): string {
-  const d = input.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '').slice(0, 11);
+  const d = input
+    .replace(/\D/g, '')
+    .replace(/^55(?=\d{10,11}$)/, '')
+    .slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : '';
   if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
   if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
@@ -18,7 +21,10 @@ export function maskPhoneBR(input: string): string {
 }
 
 export function maskCardNumber(input: string): string {
-  return input.replace(/\D/g, '').slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
+  return input
+    .replace(/\D/g, '')
+    .slice(0, 19)
+    .replace(/(\d{4})(?=\d)/g, '$1 ');
 }
 
 export function maskExpiry(input: string): string {
@@ -28,8 +34,16 @@ export function maskExpiry(input: string): string {
 
 export function maskCpfCnpj(input: string): string {
   const d = input.replace(/\D/g, '').slice(0, 14);
-  if (d.length <= 11) return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-  return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+  if (d.length <= 11)
+    return d
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
 }
 
 export function maskPostalCode(input: string): string {
@@ -72,7 +86,11 @@ function sameDay(a: Date, b: Date) {
 }
 
 /** "Hoje, 14h–16h" / "Amanhã, 09h–10h" / "Qui 16/10, 14h". */
-export function formatSchedule(startsAtIso: string | null | undefined, windowMinutes?: number | null, now = new Date()): string {
+export function formatSchedule(
+  startsAtIso: string | null | undefined,
+  windowMinutes?: number | null,
+  now = new Date(),
+): string {
   if (!startsAtIso) return 'Agora';
   const start = new Date(startsAtIso);
   if (Number.isNaN(start.getTime())) return 'Agora';
@@ -83,7 +101,8 @@ export function formatSchedule(startsAtIso: string | null | undefined, windowMin
     : sameDay(start, tomorrow)
       ? 'Amanhã'
       : `${WEEKDAY_SHORT[start.getDay()]} ${String(start.getDate()).padStart(2, '0')}/${String(start.getMonth() + 1).padStart(2, '0')}`;
-  const hour = (d: Date) => `${String(d.getHours()).padStart(2, '0')}h${d.getMinutes() ? String(d.getMinutes()).padStart(2, '0') : ''}`;
+  const hour = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}h${d.getMinutes() ? String(d.getMinutes()).padStart(2, '0') : ''}`;
   if (windowMinutes) {
     const end = new Date(start.getTime() + windowMinutes * 60_000);
     return `${day}, ${hour(start)}–${hour(end)}`;

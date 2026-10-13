@@ -22,7 +22,15 @@ export function DateTimeField({ label, value, onChange, minimumDate }: DateTimeF
         {label}
       </Text>
       {!iosInline ? (
-        <Pressable onPress={() => setMode('date')} accessibilityRole="button" accessibilityLabel={`${label}: ${formatSchedule(value.toISOString())}. Alterar`} style={[styles.field, { borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface }]}>
+        <Pressable
+          onPress={() => setMode('date')}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${formatSchedule(value.toISOString())}. Alterar`}
+          style={[
+            styles.field,
+            { borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface },
+          ]}
+        >
           <Icon name="calendar" size="md" color={colors.textMuted} />
           <Text variant="body" style={{ flex: 1 }}>
             {formatSchedule(value.toISOString())}
@@ -50,6 +58,13 @@ export function DateTimeField({ label, value, onChange, minimumDate }: DateTimeF
 }
 
 const styles = StyleSheet.create({
-  field: { minHeight: 52, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
+  field: {
+    minHeight: 52,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+  },
   inlineRow: { alignItems: 'flex-start' },
 });

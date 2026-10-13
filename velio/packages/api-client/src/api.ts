@@ -152,6 +152,15 @@ export function createApi(http: HttpClient) {
         http.patch<ProviderMe>('/v1/providers/me/availability', b),
       pushLocation: (b: Infer<typeof LocationBatchInput>) =>
         http.post<{ accepted: number }>('/v1/providers/me/location', b),
+      schedule: () =>
+        http.get<{ windows: Array<{ weekday: number; startMinute: number; endMinute: number }> }>(
+          '/v1/providers/me/schedule',
+        ),
+      setSchedule: (b: { windows: Array<{ weekday: number; startMinute: number; endMinute: number }> }) =>
+        http.put<{ windows: Array<{ weekday: number; startMinute: number; endMinute: number }> }>(
+          '/v1/providers/me/schedule',
+          b,
+        ),
       offers: () => http.get<DispatchOffer[]>('/v1/providers/me/offers'),
       acceptOffer: (offerId: string) => http.post<ServiceOrderDetail>(`/v1/offers/${offerId}/accept`),
       rejectOffer: (offerId: string) => http.post<void>(`/v1/offers/${offerId}/reject`),

@@ -6,34 +6,59 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 const CUSTOMER_REASONS = ['Mudei de ideia', 'Resolvi de outra forma', 'Demorou demais', 'Erro no pedido'];
-const PROVIDER_REASONS = ['Imprevisto pessoal', 'Problema com o veículo', 'Cliente não responde', 'Local inacessível'];
+const PROVIDER_REASONS = [
+  'Imprevisto pessoal',
+  'Problema com o veículo',
+  'Cliente não responde',
+  'Local inacessível',
+];
 
 export interface CancelSheetProps {
   visible: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void;
   loading?: boolean;
-  role: 'customer' | 'provider';
+  audience: 'customer' | 'provider';
   status: OrderStatus;
   acceptedAt?: string | null;
   priceCents?: number | null;
 }
 
 /** C-32 / P-19: cancelar com custo (cliente) ou aviso de penalidade (prestador) visível. */
-export function CancelSheet({ visible, onClose, onConfirm, loading, role, status, acceptedAt, priceCents }: CancelSheetProps) {
+export function CancelSheet({
+  visible,
+  onClose,
+  onConfirm,
+  loading,
+  audience: role,
+  status,
+  acceptedAt,
+  priceCents,
+}: CancelSheetProps) {
   const { spacing } = useTheme();
   const [reason, setReason] = useState('');
   const [custom, setCustom] = useState('');
-  const outcome = role === 'customer' ? customerCancellation(status, acceptedAt ? new Date(acceptedAt) : null, new Date(), priceCents ?? null) : null;
+  const outcome =
+    role === 'customer'
+      ? customerCancellation(status, acceptedAt ? new Date(acceptedAt) : null, new Date(), priceCents ?? null)
+      : null;
   const finalReason = (custom.trim() || reason).trim();
   const reasons = role === 'customer' ? CUSTOMER_REASONS : PROVIDER_REASONS;
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={role === 'customer' ? 'Cancelar pedido?' : 'Cancelar atendimento?'}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={role === 'customer' ? 'Cancelar pedido?' : 'Cancelar atendimento?'}
+    >
       <View style={{ gap: spacing[4] }}>
         {role === 'customer' && outcome ? (
           <Text variant="body" color={outcome.feeCents > 0 ? 'warning' : 'muted'}>
-            {!outcome.allowed ? outcome.reason : outcome.feeCents > 0 ? `Taxa de ${formatBRL(outcome.feeCents)}. ${outcome.reason}.` : 'Sem custo.'}
+            {!outcome.allowed
+              ? outcome.reason
+              : outcome.feeCents > 0
+                ? `Taxa de ${formatBRL(outcome.feeCents)}. ${outcome.reason}.`
+                : 'Sem custo.'}
           </Text>
         ) : (
           <Text variant="body" color="warning">
@@ -45,9 +70,18 @@ export function CancelSheet({ visible, onClose, onConfirm, loading, role, status
             <Chip key={r} label={r} selected={reason === r} onPress={() => setReason(r)} />
           ))}
         </View>
-        <Input placeholder="Outro motivo (opcional)" value={custom} onChangeText={setCustom} maxLength={300} />
+        <Input
+          placeholder="Outro motivo (opcional)"
+          value={custom}
+          onChangeText={setCustom}
+          maxLength={300}
+        />
         <Button
-          label={role === 'customer' && outcome && outcome.feeCents > 0 ? `Cancelar com taxa de ${formatBRL(outcome.feeCents)}` : 'Confirmar cancelamento'}
+          label={
+            role === 'customer' && outcome && outcome.feeCents > 0
+              ? `Cancelar com taxa de ${formatBRL(outcome.feeCents)}`
+              : 'Confirmar cancelamento'
+          }
           variant="danger"
           onPress={() => onConfirm(finalReason)}
           loading={loading}

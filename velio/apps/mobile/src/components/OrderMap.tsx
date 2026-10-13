@@ -18,7 +18,15 @@ export interface OrderMapProps {
 }
 
 /** Mapa nativo (Apple Maps/Google Maps) com pino do endereço, marcador do prestador e rota reta. */
-export function OrderMap({ destination, provider, secondary, approxRadiusM, follow = true, height = 260, accessibilitySummary }: OrderMapProps) {
+export function OrderMap({
+  destination,
+  provider,
+  secondary,
+  approxRadiusM,
+  follow = true,
+  height = 260,
+  accessibilitySummary,
+}: OrderMapProps) {
   const { colors } = useTheme();
   const ref = useRef<MapView>(null);
   const center = destination ?? provider ?? { lat: -23.5505, lng: -46.6333 };
@@ -32,7 +40,15 @@ export function OrderMap({ destination, provider, secondary, approxRadiusM, foll
         { edgePadding: { top: 60, bottom: 60, left: 60, right: 60 }, animated: true },
       );
     } else if (points[0]) {
-      ref.current.animateToRegion({ latitude: points[0].lat, longitude: points[0].lng, latitudeDelta: approxRadiusM ? 0.02 : 0.01, longitudeDelta: approxRadiusM ? 0.02 : 0.01 }, 480);
+      ref.current.animateToRegion(
+        {
+          latitude: points[0].lat,
+          longitude: points[0].lng,
+          latitudeDelta: approxRadiusM ? 0.02 : 0.01,
+          longitudeDelta: approxRadiusM ? 0.02 : 0.01,
+        },
+        480,
+      );
     }
   }, [destination, provider, secondary, follow, approxRadiusM]);
 
@@ -41,7 +57,12 @@ export function OrderMap({ destination, provider, secondary, approxRadiusM, foll
       <MapView
         ref={ref}
         style={StyleSheet.absoluteFill}
-        initialRegion={{ latitude: center.lat, longitude: center.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
+        initialRegion={{
+          latitude: center.lat,
+          longitude: center.lng,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }}
         showsUserLocation={false}
         pitchEnabled={false}
         rotateEnabled={false}
@@ -49,20 +70,47 @@ export function OrderMap({ destination, provider, secondary, approxRadiusM, foll
         userInterfaceStyle={undefined}
       >
         {approxRadiusM && destination ? (
-          <Circle center={{ latitude: destination.lat, longitude: destination.lng }} radius={approxRadiusM} fillColor={`${colors.primary}33`} strokeColor={colors.primary} strokeWidth={1.5} />
+          <Circle
+            center={{ latitude: destination.lat, longitude: destination.lng }}
+            radius={approxRadiusM}
+            fillColor={`${colors.primary}33`}
+            strokeColor={colors.primary}
+            strokeWidth={1.5}
+          />
         ) : destination ? (
-          <Marker coordinate={{ latitude: destination.lat, longitude: destination.lng }} anchor={{ x: 0.5, y: 1 }} tracksViewChanges={false} accessibilityLabel="Endereço do serviço">
+          <Marker
+            coordinate={{ latitude: destination.lat, longitude: destination.lng }}
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
+            accessibilityLabel="Endereço do serviço"
+          >
             <Icon name="map-pin" size={32} color={colors.text} />
           </Marker>
         ) : null}
         {secondary ? (
-          <Marker coordinate={{ latitude: secondary.lat, longitude: secondary.lng }} anchor={{ x: 0.5, y: 1 }} tracksViewChanges={false} accessibilityLabel="Destino">
+          <Marker
+            coordinate={{ latitude: secondary.lat, longitude: secondary.lng }}
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
+            accessibilityLabel="Destino"
+          >
             <Icon name="flag" size={28} color={colors.textMuted} />
           </Marker>
         ) : null}
         {provider ? (
-          <Marker coordinate={{ latitude: provider.lat, longitude: provider.lng }} anchor={{ x: 0.5, y: 0.5 }} rotation={provider.headingDeg ?? 0} flat accessibilityLabel="Profissional">
-            <View style={[styles.providerMarker, { backgroundColor: colors.primary, borderColor: colors.surface }]}>
+          <Marker
+            coordinate={{ latitude: provider.lat, longitude: provider.lng }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            rotation={provider.headingDeg ?? 0}
+            flat
+            accessibilityLabel="Profissional"
+          >
+            <View
+              style={[
+                styles.providerMarker,
+                { backgroundColor: colors.primary, borderColor: colors.surface },
+              ]}
+            >
               <Icon name="navigation" size={18} color={colors.textOnPrimary} />
             </View>
           </Marker>
@@ -85,5 +133,12 @@ export function OrderMap({ destination, provider, secondary, approxRadiusM, foll
 }
 
 const styles = StyleSheet.create({
-  providerMarker: { width: 36, height: 36, borderRadius: 18, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  providerMarker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

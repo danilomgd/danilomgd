@@ -32,7 +32,13 @@ export function Skeleton({ width = '100%', height = 16, radius, circle, style }:
     <Animated.View
       accessibilityLabel="Carregando"
       style={[
-        { width, height: circle ? (typeof width === 'number' ? width : height) : height, borderRadius: circle ? 999 : (radius ?? r.sm), backgroundColor: colors.surfaceAlt, opacity },
+        {
+          width,
+          height: circle ? (typeof width === 'number' ? width : height) : height,
+          borderRadius: circle ? 999 : (radius ?? r.sm),
+          backgroundColor: colors.surfaceAlt,
+          opacity,
+        },
         style,
       ]}
     />

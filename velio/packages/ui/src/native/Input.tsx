@@ -18,7 +18,21 @@ export interface InputProps extends TextInputProps {
 
 /** Campo de texto com rótulo visível, erro inline e estados de foco. */
 export const Input = forwardRef<TextInput, InputProps>(function Input(
-  { label, error, hint, prefix, suffix, icon, kind = 'text', containerStyle, style, onFocus, onBlur, editable = true, ...rest },
+  {
+    label,
+    error,
+    hint,
+    prefix,
+    suffix,
+    icon,
+    kind = 'text',
+    containerStyle,
+    style,
+    onFocus,
+    onBlur,
+    editable = true,
+    ...rest
+  },
   ref,
 ) {
   const { colors, radius, typography } = useTheme();
@@ -61,7 +75,11 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           multiline={multiline}
           editable={editable}
           keyboardType={
-            kind === 'money' || kind === 'odometer' ? 'number-pad' : kind === 'phone' ? 'phone-pad' : rest.keyboardType
+            kind === 'money' || kind === 'odometer'
+              ? 'number-pad'
+              : kind === 'phone'
+                ? 'phone-pad'
+                : rest.keyboardType
           }
           textAlignVertical={multiline ? 'top' : 'center'}
           onFocus={(e) => {

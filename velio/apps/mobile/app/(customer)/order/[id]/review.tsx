@@ -1,5 +1,5 @@
-import { Avatar, Button, Chip, Input, RatingStars, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation } from '@tanstack/react-query';
+import { Avatar, Button, Chip, Input, RatingStars, Text, useTheme, useToast } from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -28,7 +28,8 @@ export default function ReviewScreen() {
   const [comment, setComment] = useState('');
 
   const submit = useMutation({
-    mutationFn: () => api.orders.review(id, { rating: rating ?? 5, tags, comment: comment.trim() || undefined }),
+    mutationFn: () =>
+      api.orders.review(id, { rating: rating ?? 5, tags, comment: comment.trim() || undefined }),
     onSuccess: async (r) => {
       track('review_created', { rating: r.rating, tags: r.tags.length, hasComment: Boolean(r.comment) }, id);
       const fresh = await api.orders.get(id).catch(() => null);
@@ -43,7 +44,17 @@ export default function ReviewScreen() {
   const tagSet = rating != null && rating >= 4 ? TAGS_HIGH : TAGS_LOW;
 
   return (
-    <Screen keyboard footer={<Button label="Enviar avaliação" onPress={() => submit.mutate()} loading={submit.isPending} disabled={rating == null} />}>
+    <Screen
+      keyboard
+      footer={
+        <Button
+          label="Enviar avaliação"
+          onPress={() => submit.mutate()}
+          loading={submit.isPending}
+          disabled={rating == null}
+        />
+      }
+    >
       <Header close title="" />
       <View style={styles.center}>
         <Avatar name={order?.provider?.displayName} url={order?.provider?.avatarUrl} size={72} />
@@ -64,10 +75,25 @@ export default function ReviewScreen() {
         <View style={{ gap: spacing[4], marginTop: spacing[6] }}>
           <View style={styles.chips}>
             {tagSet.map((t) => (
-              <Chip key={t} label={t} selected={tags.includes(t)} onPress={() => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : cur.length < 5 ? [...cur, t] : cur))} />
+              <Chip
+                key={t}
+                label={t}
+                selected={tags.includes(t)}
+                onPress={() =>
+                  setTags((cur) =>
+                    cur.includes(t) ? cur.filter((x) => x !== t) : cur.length < 5 ? [...cur, t] : cur,
+                  )
+                }
+              />
             ))}
           </View>
-          <Input kind="multiline" placeholder="Quer contar mais? (opcional)" value={comment} onChangeText={setComment} maxLength={600} />
+          <Input
+            kind="multiline"
+            placeholder="Quer contar mais? (opcional)"
+            value={comment}
+            onChangeText={setComment}
+            maxLength={600}
+          />
         </View>
       ) : null}
     </Screen>

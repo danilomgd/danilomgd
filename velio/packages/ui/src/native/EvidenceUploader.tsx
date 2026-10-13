@@ -38,17 +38,39 @@ export interface EvidenceUploaderProps {
 /** Captura com `expo-image-picker`. Remove EXIF (sem localização) e comprime. */
 export async function defaultPickImage(source: 'camera' | 'library'): Promise<PickedImage | null> {
   const picker = await import('expo-image-picker');
-  const perm = source === 'camera' ? await picker.requestCameraPermissionsAsync() : await picker.requestMediaLibraryPermissionsAsync();
+  const perm =
+    source === 'camera'
+      ? await picker.requestCameraPermissionsAsync()
+      : await picker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) return null;
-  const options: ImagePickerOptions = { mediaTypes: ['images'], quality: 0.8, exif: false, allowsEditing: false };
-  const result = source === 'camera' ? await picker.launchCameraAsync(options) : await picker.launchImageLibraryAsync(options);
+  const options: ImagePickerOptions = {
+    mediaTypes: ['images'],
+    quality: 0.8,
+    exif: false,
+    allowsEditing: false,
+  };
+  const result =
+    source === 'camera'
+      ? await picker.launchCameraAsync(options)
+      : await picker.launchImageLibraryAsync(options);
   if (result.canceled) return null;
   const asset = result.assets[0];
   return asset ? { uri: asset.uri, width: asset.width, height: asset.height } : null;
 }
 
 /** Grade de fotos (3 colunas, miniatura 96) com estados: enviando, falhou, na fila, obrigatória faltando. */
-export function EvidenceUploader({ items, required = 0, label, onAdd, onRemove, onRetry, readOnly, pickImage, source = 'camera', disabled }: EvidenceUploaderProps) {
+export function EvidenceUploader({
+  items,
+  required = 0,
+  label,
+  onAdd,
+  onRemove,
+  onRetry,
+  readOnly,
+  pickImage,
+  source = 'camera',
+  disabled,
+}: EvidenceUploaderProps) {
   const { colors, radius } = useTheme();
   const missing = Math.max(0, required - items.length);
   const placeholders = Array.from({ length: missing }, (_, i) => i);
@@ -75,7 +97,11 @@ export function EvidenceUploader({ items, required = 0, label, onAdd, onRemove, 
       ) : null}
       <View style={styles.grid}>
         {items.map((it, idx) => (
-          <View key={it.id} style={[styles.cell, { borderRadius: radius.md, backgroundColor: colors.surfaceAlt }]} accessibilityLabel={`Foto ${idx + 1} de ${items.length}`}>
+          <View
+            key={it.id}
+            style={[styles.cell, { borderRadius: radius.md, backgroundColor: colors.surfaceAlt }]}
+            accessibilityLabel={`Foto ${idx + 1} de ${items.length}`}
+          >
             <Image source={{ uri: it.uri }} style={[styles.image, { borderRadius: radius.md }]} />
             {it.status === 'uploading' ? (
               <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
@@ -83,7 +109,12 @@ export function EvidenceUploader({ items, required = 0, label, onAdd, onRemove, 
               </View>
             ) : null}
             {it.status === 'failed' ? (
-              <Pressable onPress={() => onRetry?.(it.id)} style={[styles.overlay, { backgroundColor: colors.overlay }]} accessibilityRole="button" accessibilityLabel="Reenviar foto">
+              <Pressable
+                onPress={() => onRetry?.(it.id)}
+                style={[styles.overlay, { backgroundColor: colors.overlay }]}
+                accessibilityRole="button"
+                accessibilityLabel="Reenviar foto"
+              >
                 <Icon name="alert-circle" size="lg" color={colors.textOnPrimary} />
                 <Text variant="caption" style={{ color: colors.textOnPrimary }}>
                   Reenviar
@@ -99,7 +130,13 @@ export function EvidenceUploader({ items, required = 0, label, onAdd, onRemove, 
               </View>
             ) : null}
             {!readOnly && onRemove && it.status !== 'uploading' ? (
-              <Pressable onPress={() => onRemove(it.id)} style={[styles.remove, { backgroundColor: colors.surface }]} accessibilityRole="button" accessibilityLabel="Remover foto" hitSlop={8}>
+              <Pressable
+                onPress={() => onRemove(it.id)}
+                style={[styles.remove, { backgroundColor: colors.surface }]}
+                accessibilityRole="button"
+                accessibilityLabel="Remover foto"
+                hitSlop={8}
+              >
                 <Icon name="x" size="sm" color={colors.text} />
               </Pressable>
             ) : null}
@@ -123,7 +160,13 @@ export function EvidenceUploader({ items, required = 0, label, onAdd, onRemove, 
             ))
           : null}
         {!readOnly && missing === 0 ? (
-          <Pressable onPress={handleAdd} disabled={disabled} accessibilityRole="button" accessibilityLabel="Adicionar foto" style={[styles.cell, styles.dashed, { borderRadius: radius.md, borderColor: colors.border }]}>
+          <Pressable
+            onPress={handleAdd}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel="Adicionar foto"
+            style={[styles.cell, styles.dashed, { borderRadius: radius.md, borderColor: colors.border }]}
+          >
             <Icon name="plus" size="lg" color={colors.textMuted} />
             <Text variant="caption" color="muted">
               Adicionar
@@ -143,5 +186,14 @@ const styles = StyleSheet.create({
   dashed: { borderWidth: 1.5, borderStyle: 'dashed', gap: 4 },
   image: { width: 96, height: 96 },
   overlay: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  remove: { position: 'absolute', top: 4, right: 4, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  remove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

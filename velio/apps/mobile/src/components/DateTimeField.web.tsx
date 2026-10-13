@@ -8,7 +8,9 @@ function pad(n: number) {
 
 /** Web (ambiente de desenvolvimento): texto "DD/MM/AAAA HH:MM". */
 export function DateTimeField({ label, value, onChange, minimumDate }: DateTimeFieldProps) {
-  const [text, setText] = useState(`${pad(value.getDate())}/${pad(value.getMonth() + 1)}/${value.getFullYear()} ${pad(value.getHours())}:${pad(value.getMinutes())}`);
+  const [text, setText] = useState(
+    `${pad(value.getDate())}/${pad(value.getMonth() + 1)}/${value.getFullYear()} ${pad(value.getHours())}:${pad(value.getMinutes())}`,
+  );
   const [error, setError] = useState<string | null>(null);
   return (
     <Input

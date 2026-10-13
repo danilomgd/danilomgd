@@ -1,4 +1,13 @@
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Icon, type IconProps } from './Icon';
 import { Text } from './Text';
@@ -27,10 +36,21 @@ export function useToast() {
   return useContext(ToastContext);
 }
 
-const ICONS: Record<ToastTone, IconProps['name']> = { neutral: 'info', success: 'check-circle', error: 'alert-circle', warning: 'alert-triangle' };
+const ICONS: Record<ToastTone, IconProps['name']> = {
+  neutral: 'info',
+  success: 'check-circle',
+  error: 'alert-circle',
+  warning: 'alert-triangle',
+};
 
 /** Provedor de toasts: empilha até 2, some em 4 s (8 s com ação). */
-export function ToastProvider({ children, bottomOffset = 24 }: { children: ReactNode; bottomOffset?: number }) {
+export function ToastProvider({
+  children,
+  bottomOffset = 24,
+}: {
+  children: ReactNode;
+  bottomOffset?: number;
+}) {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const counter = useRef(0);
 
@@ -68,14 +88,27 @@ function ToastView({ toast, onDismiss }: { toast: ToastEntry; onDismiss: () => v
     Animated.timing(anim, { toValue: 1, duration: motion.duration.fast, useNativeDriver: true }).start();
   }, [anim, motion.duration.fast]);
   const tone = toast.tone ?? 'neutral';
-  const iconColor = tone === 'success' ? colors.success : tone === 'error' ? colors.danger : tone === 'warning' ? colors.warning : colors.textOnPrimary;
+  const iconColor =
+    tone === 'success'
+      ? colors.success
+      : tone === 'error'
+        ? colors.danger
+        : tone === 'warning'
+          ? colors.warning
+          : colors.textOnPrimary;
   return (
     <Animated.View
       accessibilityLiveRegion="polite"
       accessibilityRole="alert"
       style={[
         styles.toast,
-        { backgroundColor: colors.text, borderRadius: radius.md, opacity: anim, transform: [{ translateY: Animated.multiply(Animated.subtract(1, anim), 16) }], ...elevation.md },
+        {
+          backgroundColor: colors.text,
+          borderRadius: radius.md,
+          opacity: anim,
+          transform: [{ translateY: Animated.multiply(Animated.subtract(1, anim), 16) }],
+          ...elevation.md,
+        },
       ]}
     >
       <Icon name={ICONS[tone]} size="md" color={iconColor} />
@@ -102,5 +135,12 @@ function ToastView({ toast, onDismiss }: { toast: ToastEntry; onDismiss: () => v
 
 const styles = StyleSheet.create({
   host: { position: 'absolute', left: 16, right: 16, gap: 8 },
-  toast: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, minHeight: 48 },
+  toast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
 });

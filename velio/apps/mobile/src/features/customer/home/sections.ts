@@ -1,4 +1,12 @@
-import { Address, type HomeSection, ServiceCategory, ServiceOrder, ServiceSummary, Subscription, SubscriptionPlan } from '@velio/contracts';
+import {
+  Address,
+  type HomeSection,
+  ServiceCategory,
+  ServiceOrder,
+  ServiceSummary,
+  Subscription,
+  SubscriptionPlan,
+} from '@velio/contracts';
 import { z } from 'zod';
 
 /** Itens de seção chegam como `unknown[]`; validamos por tipo e ignoramos o que não bate. */

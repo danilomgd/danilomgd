@@ -1,4 +1,5 @@
-import { IS_DEV } from './config';
+/** Sem importar módulos nativos: este arquivo é puro e testável em Node. */
+const IS_DEV = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
 
 export interface CardInput {
   /** Número completo. Nunca sai do aparelho: só o token vai à API. */
@@ -55,8 +56,10 @@ export function detectBrand(number: string): string {
 
 export function validateCard(card: CardInput, now = new Date()): void {
   if (!isValidCardNumber(card.number)) throw new CardValidationError('number', 'Número do cartão inválido.');
-  if (card.holderName.trim().length < 2) throw new CardValidationError('holderName', 'Informe o nome como está no cartão.');
-  if (card.expMonth < 1 || card.expMonth > 12) throw new CardValidationError('expMonth', 'Mês de validade inválido.');
+  if (card.holderName.trim().length < 2)
+    throw new CardValidationError('holderName', 'Informe o nome como está no cartão.');
+  if (card.expMonth < 1 || card.expMonth > 12)
+    throw new CardValidationError('expMonth', 'Mês de validade inválido.');
   const year = card.expYear < 100 ? 2000 + card.expYear : card.expYear;
   const expires = new Date(year, card.expMonth, 0, 23, 59, 59);
   if (expires < now) throw new CardValidationError('expYear', 'Cartão vencido.');
@@ -72,7 +75,10 @@ export function validateCard(card: CardInput, now = new Date()): void {
  *   Enquanto não houver chave pública configurada em produção, a função falha explicitamente em vez de
  *   enviar um token falso.
  */
-export async function tokenizeCard(card: CardInput, opts: { sandbox?: boolean; tokenizer?: (c: CardInput) => Promise<string> } = {}): Promise<CardToken> {
+export async function tokenizeCard(
+  card: CardInput,
+  opts: { sandbox?: boolean; tokenizer?: (c: CardInput) => Promise<string> } = {},
+): Promise<CardToken> {
   validateCard(card);
   const digits = card.number.replace(/\D/g, '');
   const last4 = digits.slice(-4);

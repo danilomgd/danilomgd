@@ -1,6 +1,18 @@
-import { type SubscriptionPlan, formatBRL } from '@velio/contracts';
-import { BottomSheet, Button, Card, Chip, EmptyState, ListSkeleton, Select, StatusPill, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatBRL, type SubscriptionPlan } from '@velio/contracts';
+import {
+  BottomSheet,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  ListSkeleton,
+  Select,
+  StatusPill,
+  Text,
+  useTheme,
+  useToast,
+} from '@velio/ui/native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -33,7 +45,14 @@ export default function PlansScreen() {
   const [period, setPeriod] = useState<'MORNING' | 'AFTERNOON' | null>(null);
 
   const subscribe = useMutation({
-    mutationFn: () => api.me.subscribe({ planId: plan?.id ?? '', equipmentIds, addressId: addressId ?? '', paymentMethodId: paymentMethodId ?? '', preferredPeriod: period ?? undefined }),
+    mutationFn: () =>
+      api.me.subscribe({
+        planId: plan?.id ?? '',
+        equipmentIds,
+        addressId: addressId ?? '',
+        paymentMethodId: paymentMethodId ?? '',
+        preferredPeriod: period ?? undefined,
+      }),
     onSuccess: (s) => {
       track('subscription_started', { plan: plan?.slug ?? '' });
       qc.invalidateQueries({ queryKey: qk.subscriptions });
@@ -52,15 +71,31 @@ export default function PlansScreen() {
         <Section title="Suas assinaturas">
           <View style={{ gap: spacing[2] }}>
             {active.map((s) => (
-              <Card key={s.id} onPress={() => router.push(`/(customer)/subscriptions/${s.id}`)} accessibilityLabel={`Assinatura ${s.planName}`}>
+              <Card
+                key={s.id}
+                onPress={() => router.push(`/(customer)/subscriptions/${s.id}`)}
+                accessibilityLabel={`Assinatura ${s.planName}`}
+              >
                 <View style={styles.row}>
                   <Text variant="heading" style={{ flex: 1 }}>
                     {s.planName}
                   </Text>
-                  <StatusPill label={s.status === 'ACTIVE' ? 'Ativa' : s.status === 'PAUSED' ? 'Pausada' : 'Pagamento pendente'} tone={s.status === 'ACTIVE' ? 'success' : 'warning'} size="sm" />
+                  <StatusPill
+                    label={
+                      s.status === 'ACTIVE'
+                        ? 'Ativa'
+                        : s.status === 'PAUSED'
+                          ? 'Pausada'
+                          : 'Pagamento pendente'
+                    }
+                    tone={s.status === 'ACTIVE' ? 'success' : 'warning'}
+                    size="sm"
+                  />
                 </View>
                 <Text variant="bodySm" color="muted">
-                  {s.nextVisitDueAt ? `Próxima visita: ${formatDate(s.nextVisitDueAt)}` : 'Próxima visita a agendar'}
+                  {s.nextVisitDueAt
+                    ? `Próxima visita: ${formatDate(s.nextVisitDueAt)}`
+                    : 'Próxima visita a agendar'}
                 </Text>
               </Card>
             ))}
@@ -83,7 +118,9 @@ export default function PlansScreen() {
                         </Text>
                       ) : null}
                       <Text variant="mono" style={{ marginTop: 8 }}>
-                        {formatBRL(p.priceCents)} a cada {p.intervalMonths === 1 ? 'mês' : `${p.intervalMonths} meses`} · {p.visitsPerCycle} {p.visitsPerCycle === 1 ? 'visita' : 'visitas'}
+                        {formatBRL(p.priceCents)} a cada{' '}
+                        {p.intervalMonths === 1 ? 'mês' : `${p.intervalMonths} meses`} · {p.visitsPerCycle}{' '}
+                        {p.visitsPerCycle === 1 ? 'visita' : 'visitas'}
                       </Text>
                       {p.benefits.length ? (
                         <View style={{ marginTop: 8, gap: 4 }}>
@@ -94,30 +131,77 @@ export default function PlansScreen() {
                           ))}
                         </View>
                       ) : null}
-                      <Button label={`Assinar ${p.name}`} size="md" style={{ marginTop: 12 }} onPress={() => setPlan(p)} />
+                      <Button
+                        label={`Assinar ${p.name}`}
+                        size="md"
+                        style={{ marginTop: 12 }}
+                        onPress={() => setPlan(p)}
+                      />
                     </Card>
                   ))}
               </View>
             ) : (
-              <EmptyState icon="calendar" title="Sem planos na sua região" description="Avisaremos quando houver." />
+              <EmptyState
+                icon="calendar"
+                title="Sem planos na sua região"
+                description="Avisaremos quando houver."
+              />
             )
           }
         </QueryState>
       </Section>
 
-      <BottomSheet visible={Boolean(plan)} onClose={() => setPlan(null)} title={plan ? `Assinar ${plan.name}` : ''}>
-        <ScrollView style={{ maxHeight: 520 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing[3], paddingBottom: spacing[2] }}>
+      <BottomSheet
+        visible={Boolean(plan)}
+        onClose={() => setPlan(null)}
+        title={plan ? `Assinar ${plan.name}` : ''}
+      >
+        <ScrollView
+          style={{ maxHeight: 520 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ gap: spacing[3], paddingBottom: spacing[2] }}
+        >
           <Text variant="labelSm" color="muted">
             Equipamentos
           </Text>
           <View style={styles.chips}>
             {(equipments.data ?? []).map((e) => (
-              <Chip key={e.id} label={`${e.brand} · ${e.room}`} selected={equipmentIds.includes(e.id)} onPress={() => setEquipmentIds((c) => (c.includes(e.id) ? c.filter((x) => x !== e.id) : [...c, e.id]))} />
+              <Chip
+                key={e.id}
+                label={`${e.brand} · ${e.room}`}
+                selected={equipmentIds.includes(e.id)}
+                onPress={() =>
+                  setEquipmentIds((c) => (c.includes(e.id) ? c.filter((x) => x !== e.id) : [...c, e.id]))
+                }
+              />
             ))}
-            {!equipments.data?.length ? <Button label="Cadastrar equipamento" variant="secondary" size="md" onPress={() => router.push('/(customer)/account/equipments')} /> : null}
+            {!equipments.data?.length ? (
+              <Button
+                label="Cadastrar equipamento"
+                variant="secondary"
+                size="md"
+                onPress={() => router.push('/(customer)/account/equipments')}
+              />
+            ) : null}
           </View>
-          <Select label="Endereço" value={addressId} options={(addresses.data ?? []).map((a) => ({ value: a.id, label: `${a.label} · ${a.street}, ${a.number}` }))} onChange={setAddressId} />
-          <Select label="Pagamento" value={paymentMethodId} options={(methods.data ?? []).map((m) => ({ value: m.id, label: m.kind === 'CARD' ? `${m.brand ?? 'Cartão'} final ${m.last4 ?? ''}` : m.kind }))} onChange={setPaymentMethodId} />
+          <Select
+            label="Endereço"
+            value={addressId}
+            options={(addresses.data ?? []).map((a) => ({
+              value: a.id,
+              label: `${a.label} · ${a.street}, ${a.number}`,
+            }))}
+            onChange={setAddressId}
+          />
+          <Select
+            label="Pagamento"
+            value={paymentMethodId}
+            options={(methods.data ?? []).map((m) => ({
+              value: m.id,
+              label: m.kind === 'CARD' ? `${m.brand ?? 'Cartão'} final ${m.last4 ?? ''}` : m.kind,
+            }))}
+            onChange={setPaymentMethodId}
+          />
           <Text variant="labelSm" color="muted">
             Período preferido
           </Text>
@@ -125,11 +209,20 @@ export default function PlansScreen() {
             <Chip label="Manhã" selected={period === 'MORNING'} onPress={() => setPeriod('MORNING')} />
             <Chip label="Tarde" selected={period === 'AFTERNOON'} onPress={() => setPeriod('AFTERNOON')} />
           </View>
-          <Button label={plan ? `Confirmar ${formatBRL(plan.priceCents)}` : 'Confirmar'} onPress={() => subscribe.mutate()} loading={subscribe.isPending} disabled={!equipmentIds.length || !addressId || !paymentMethodId} disabledReason="Escolha equipamento, endereço e pagamento." />
+          <Button
+            label={plan ? `Confirmar ${formatBRL(plan.priceCents)}` : 'Confirmar'}
+            onPress={() => subscribe.mutate()}
+            loading={subscribe.isPending}
+            disabled={!equipmentIds.length || !addressId || !paymentMethodId}
+            disabledReason="Escolha equipamento, endereço e pagamento."
+          />
         </ScrollView>
       </BottomSheet>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({ row: { flexDirection: 'row', alignItems: 'center', gap: 8 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 } });
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+});

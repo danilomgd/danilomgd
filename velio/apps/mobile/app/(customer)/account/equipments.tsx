@@ -1,5 +1,16 @@
-import { BottomSheet, Button, Chip, EmptyState, Input, ListItem, ListSkeleton, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  BottomSheet,
+  Button,
+  Chip,
+  EmptyState,
+  Input,
+  ListItem,
+  ListSkeleton,
+  Text,
+  useTheme,
+  useToast,
+} from '@velio/ui/native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Header } from '@/components/Header';
@@ -23,11 +34,25 @@ export default function EquipmentsScreen() {
   const { spacing } = useTheme();
   const list = useQuery({ queryKey: qk.equipments, queryFn: () => api.me.equipments() });
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ kind: 'AIR_CONDITIONER' as (typeof KINDS)[number]['value'], brand: '', model: '', btus: '', room: '' });
+  const [form, setForm] = useState({
+    kind: 'AIR_CONDITIONER' as (typeof KINDS)[number]['value'],
+    brand: '',
+    model: '',
+    btus: '',
+    room: '',
+  });
   const [error, setError] = useState<string | null>(null);
 
   const add = useMutation({
-    mutationFn: () => api.me.addEquipment({ kind: form.kind, brand: form.brand.trim(), model: form.model.trim() || undefined, btus: form.btus ? Number(form.btus) : undefined, room: form.room.trim(), maintenanceIntervalMonths: 6 }),
+    mutationFn: () =>
+      api.me.addEquipment({
+        kind: form.kind,
+        brand: form.brand.trim(),
+        model: form.model.trim() || undefined,
+        btus: form.btus ? Number(form.btus) : undefined,
+        room: form.room.trim(),
+        maintenanceIntervalMonths: 6,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.equipments });
       qc.invalidateQueries({ queryKey: ['home'] });
@@ -47,11 +72,20 @@ export default function EquipmentsScreen() {
           list.data?.length ? (
             <View>
               {list.data.map((e) => (
-                <ListItem key={e.id} title={`${e.brand}${e.model ? ` ${e.model}` : ''} · ${e.room}`} subtitle={`${KINDS.find((k) => k.value === e.kind)?.label ?? e.kind}${e.btus ? ` · ${e.btus} BTU` : ''}${e.nextMaintenanceDueAt ? ` · próxima revisão ${formatDate(e.nextMaintenanceDueAt)}` : ''}`} icon="wind" />
+                <ListItem
+                  key={e.id}
+                  title={`${e.brand}${e.model ? ` ${e.model}` : ''} · ${e.room}`}
+                  subtitle={`${KINDS.find((k) => k.value === e.kind)?.label ?? e.kind}${e.btus ? ` · ${e.btus} BTU` : ''}${e.nextMaintenanceDueAt ? ` · próxima revisão ${formatDate(e.nextMaintenanceDueAt)}` : ''}`}
+                  icon="wind"
+                />
               ))}
             </View>
           ) : (
-            <EmptyState icon="wind" title="Cadastre para pedir mais rápido" description="Avisamos quando a manutenção estiver perto." />
+            <EmptyState
+              icon="wind"
+              title="Cadastre para pedir mais rápido"
+              description="Avisamos quando a manutenção estiver perto."
+            />
           )
         }
       </QueryState>
@@ -59,27 +93,62 @@ export default function EquipmentsScreen() {
         <View style={{ gap: spacing[3] }}>
           <View style={styles.chips}>
             {KINDS.map((k) => (
-              <Chip key={k.value} label={k.label} selected={form.kind === k.value} onPress={() => setForm((f) => ({ ...f, kind: k.value }))} />
+              <Chip
+                key={k.value}
+                label={k.label}
+                selected={form.kind === k.value}
+                onPress={() => setForm((f) => ({ ...f, kind: k.value }))}
+              />
             ))}
           </View>
           <View style={styles.row}>
-            <Input label="Marca" value={form.brand} onChangeText={(t) => setForm((f) => ({ ...f, brand: t }))} containerStyle={{ flex: 1 }} />
-            <Input label="Modelo (opcional)" value={form.model} onChangeText={(t) => setForm((f) => ({ ...f, model: t }))} containerStyle={{ flex: 1 }} />
+            <Input
+              label="Marca"
+              value={form.brand}
+              onChangeText={(t) => setForm((f) => ({ ...f, brand: t }))}
+              containerStyle={{ flex: 1 }}
+            />
+            <Input
+              label="Modelo (opcional)"
+              value={form.model}
+              onChangeText={(t) => setForm((f) => ({ ...f, model: t }))}
+              containerStyle={{ flex: 1 }}
+            />
           </View>
           <View style={styles.row}>
-            <Input label="Cômodo" value={form.room} onChangeText={(t) => setForm((f) => ({ ...f, room: t }))} containerStyle={{ flex: 2 }} placeholder="Sala, quarto" />
-            <Input label="BTU" value={form.btus} onChangeText={(t) => setForm((f) => ({ ...f, btus: t.replace(/\D/g, '').slice(0, 6) }))} keyboardType="number-pad" containerStyle={{ flex: 1 }} />
+            <Input
+              label="Cômodo"
+              value={form.room}
+              onChangeText={(t) => setForm((f) => ({ ...f, room: t }))}
+              containerStyle={{ flex: 2 }}
+              placeholder="Sala, quarto"
+            />
+            <Input
+              label="BTU"
+              value={form.btus}
+              onChangeText={(t) => setForm((f) => ({ ...f, btus: t.replace(/\D/g, '').slice(0, 6) }))}
+              keyboardType="number-pad"
+              containerStyle={{ flex: 1 }}
+            />
           </View>
           {error ? (
             <Text variant="bodySm" color="danger">
               {error}
             </Text>
           ) : null}
-          <Button label="Salvar equipamento" onPress={() => add.mutate()} loading={add.isPending} disabled={!valid} />
+          <Button
+            label="Salvar equipamento"
+            onPress={() => add.mutate()}
+            loading={add.isPending}
+            disabled={!valid}
+          />
         </View>
       </BottomSheet>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({ row: { flexDirection: 'row', gap: 8 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 } });
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+});

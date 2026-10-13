@@ -1,13 +1,30 @@
-import { WORKFLOW_KIND_LABELS } from '@velio/contracts';
-import { Button, CardSkeleton, ErrorState, Icon, SegmentedControl, Skeleton, StatusPill, Text, durationLine, priceLine, useTheme } from '@velio/ui/native';
 import { useQuery } from '@tanstack/react-query';
+import { WORKFLOW_KIND_LABELS } from '@velio/contracts';
+import {
+  Button,
+  CardSkeleton,
+  durationLine,
+  ErrorState,
+  Icon,
+  priceLine,
+  SegmentedControl,
+  Skeleton,
+  StatusPill,
+  Text,
+  useTheme,
+} from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { Header } from '@/components/Header';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
-import { type OptionValues, ServiceOptionsForm, defaultOptionValues, missingRequired } from '@/features/customer/ServiceOptionsForm';
+import {
+  defaultOptionValues,
+  missingRequired,
+  type OptionValues,
+  ServiceOptionsForm,
+} from '@/features/customer/ServiceOptionsForm';
 import { track } from '@/lib/analytics';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/errors';
@@ -18,7 +35,11 @@ export default function ServiceScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const { colors, spacing, radius } = useTheme();
-  const service = useQuery({ queryKey: qk.service(slug), queryFn: () => api.catalog.service(slug), enabled: Boolean(slug) });
+  const service = useQuery({
+    queryKey: qk.service(slug),
+    queryFn: () => api.catalog.service(slug),
+    enabled: Boolean(slug),
+  });
   const categories = useQuery({ queryKey: qk.categories, queryFn: () => api.catalog.categories() });
   const category = categories.data?.find((c) => c.id === service.data?.categoryId);
   const [values, setValues] = useState<OptionValues>({});
@@ -28,10 +49,17 @@ export default function ServiceScreen() {
     if (!service.data) return;
     setValues(defaultOptionValues(service.data.options));
     setMode(service.data.allowsImmediate ? 'now' : 'schedule');
-    track('service_view', { slug: service.data.slug, pricingModel: service.data.pricingModel, workflowKind: service.data.workflowKind });
+    track('service_view', {
+      slug: service.data.slug,
+      pricingModel: service.data.pricingModel,
+      workflowKind: service.data.workflowKind,
+    });
   }, [service.data]);
 
-  const missing = useMemo(() => (service.data ? missingRequired(service.data.options, values) : []), [service.data, values]);
+  const missing = useMemo(
+    () => (service.data ? missingRequired(service.data.options, values) : []),
+    [service.data, values],
+  );
   const s = service.data;
   const requirements: string[] = [];
   if (category?.config.requiresStartPin) requirements.push('PIN de início');
@@ -49,7 +77,8 @@ export default function ServiceScreen() {
 
   const canSchedule = Boolean(s?.allowsScheduling);
   const canNow = Boolean(s?.allowsImmediate);
-  const ctaLabel = mode === 'now' ? 'Pedir agora' : s?.workflowKind === 'QUOTE' ? 'Solicitar orçamento' : 'Agendar';
+  const ctaLabel =
+    mode === 'now' ? 'Pedir agora' : s?.workflowKind === 'QUOTE' ? 'Solicitar orçamento' : 'Agendar';
 
   return (
     <Screen
@@ -70,13 +99,30 @@ export default function ServiceScreen() {
             <View style={styles.footerRow}>
               <View style={{ flex: 1 }}>
                 <Text variant="caption" color="muted">
-                  {s.pricingModel === 'RANGE' || s.pricingModel === 'HOURLY' ? 'A partir de' : s.pricingModel === 'QUOTE' ? 'Valor' : 'Preço'}
+                  {s.pricingModel === 'RANGE' || s.pricingModel === 'HOURLY'
+                    ? 'A partir de'
+                    : s.pricingModel === 'QUOTE'
+                      ? 'Valor'
+                      : 'Preço'}
                 </Text>
                 <Text variant="mono" style={{ fontSize: 18 }}>
                   {priceLine(s)}
                 </Text>
               </View>
-              <Button label={ctaLabel} onPress={proceed} disabled={!s.active || missing.length > 0} disabledReason={!s.active ? 'Indisponível no momento' : missing.length ? `Escolha: ${missing.join(', ')}` : undefined} fullWidth={false} style={{ flex: 1.4 }} />
+              <Button
+                label={ctaLabel}
+                onPress={proceed}
+                disabled={!s.active || missing.length > 0}
+                disabledReason={
+                  !s.active
+                    ? 'Indisponível no momento'
+                    : missing.length
+                      ? `Escolha: ${missing.join(', ')}`
+                      : undefined
+                }
+                fullWidth={false}
+                style={{ flex: 1.4 }}
+              />
             </View>
           </View>
         ) : null
@@ -92,11 +138,18 @@ export default function ServiceScreen() {
           <Skeleton height={20} width="40%" />
         </View>
       ) : service.isError || !s ? (
-        <ErrorState description={errorMessage(service.error)} onRetry={() => service.refetch()} retrying={service.isFetching} />
+        <ErrorState
+          description={errorMessage(service.error)}
+          onRetry={() => service.refetch()}
+          retrying={service.isFetching}
+        />
       ) : (
         <View style={{ paddingHorizontal: spacing[4], gap: spacing[6] }}>
           {s.imageUrl ? (
-            <Image source={{ uri: s.imageUrl }} style={{ width: '100%', aspectRatio: 3 / 2, borderRadius: radius.lg }} />
+            <Image
+              source={{ uri: s.imageUrl }}
+              style={{ width: '100%', aspectRatio: 3 / 2, borderRadius: radius.lg }}
+            />
           ) : (
             <View style={[styles.cover, { backgroundColor: colors.primarySoft, borderRadius: radius.lg }]}>
               <Icon name={category?.icon ?? 'tool'} size={48} color={colors.primary} />
@@ -150,7 +203,9 @@ export default function ServiceScreen() {
           <Section title="Como funciona">
             <View style={{ gap: spacing[2] }}>
               {[
-                mode === 'now' ? 'Você confirma e procuramos o profissional mais próximo.' : 'Você escolhe data e janela; um profissional confirma.',
+                mode === 'now'
+                  ? 'Você confirma e procuramos o profissional mais próximo.'
+                  : 'Você escolhe data e janela; um profissional confirma.',
                 'Acompanhe tudo pelo app, com chat e localização.',
                 'Cobramos só quando o serviço terminar. Depois, avalie.',
               ].map((t, i) => (

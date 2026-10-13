@@ -1,5 +1,14 @@
 import { type ReactNode, useEffect, useRef } from 'react';
-import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 import { useTheme } from './theme';
@@ -15,7 +24,14 @@ export interface BottomSheetProps {
 }
 
 /** Folha inferior modal simples: overlay, alça, cabeçalho fixo com fechar, conteúdo rolável pelo chamador. */
-export function BottomSheet({ visible, onClose, title, children, heightFraction, dismissable = true }: BottomSheetProps) {
+export function BottomSheet({
+  visible,
+  onClose,
+  title,
+  children,
+  heightFraction,
+  dismissable = true,
+}: BottomSheetProps) {
   const { colors, radius, elevation, motion } = useTheme();
   const { height } = useWindowDimensions();
   const slide = useRef(new Animated.Value(height)).current;
@@ -30,14 +46,35 @@ export function BottomSheet({ visible, onClose, title, children, heightFraction,
   const maxHeight = Math.round(height * Math.min(0.92, Math.max(0.3, heightFraction ?? 0.92)));
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={dismissable ? onClose : undefined} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={dismissable ? onClose : undefined}
+      statusBarTranslucent
+    >
       <View style={styles.root}>
-        <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={dismissable ? onClose : undefined} accessibilityLabel="Fechar" accessibilityRole="button" />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none">
+        <Pressable
+          style={[styles.overlay, { backgroundColor: colors.overlay }]}
+          onPress={dismissable ? onClose : undefined}
+          accessibilityLabel="Fechar"
+          accessibilityRole="button"
+        />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          pointerEvents="box-none"
+        >
           <Animated.View
             style={[
               styles.sheet,
-              { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, maxHeight, transform: [{ translateY: slide }], ...elevation.lg },
+              {
+                backgroundColor: colors.surface,
+                borderTopLeftRadius: radius.xl,
+                borderTopRightRadius: radius.xl,
+                maxHeight,
+                transform: [{ translateY: slide }],
+                ...elevation.lg,
+              },
               heightFraction ? { height: maxHeight } : null,
             ]}
             accessibilityViewIsModal
@@ -48,7 +85,9 @@ export function BottomSheet({ visible, onClose, title, children, heightFraction,
                 <Text variant="title" style={{ flex: 1 }} accessibilityRole="header">
                   {title ?? ''}
                 </Text>
-                {dismissable ? <IconButton icon="x" accessibilityLabel="Fechar" variant="tonal" onPress={onClose} /> : null}
+                {dismissable ? (
+                  <IconButton icon="x" accessibilityLabel="Fechar" variant="tonal" onPress={onClose} />
+                ) : null}
               </View>
             ) : null}
             <View style={styles.body}>{children}</View>

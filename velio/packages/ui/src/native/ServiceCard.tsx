@@ -23,9 +23,14 @@ export function priceLine(s: ServiceCardData): string {
     case 'FIXED':
       return s.basePriceCents != null ? formatBRL(s.basePriceCents) : 'Preço na confirmação';
     case 'HOURLY':
-      return s.hourlyRateCents != null ? `${formatBRL(s.hourlyRateCents)}/h` : s.basePriceCents != null ? `${formatBRL(s.basePriceCents)}/h` : 'Por hora';
+      return s.hourlyRateCents != null
+        ? `${formatBRL(s.hourlyRateCents)}/h`
+        : s.basePriceCents != null
+          ? `${formatBRL(s.basePriceCents)}/h`
+          : 'Por hora';
     case 'RANGE':
-      if (s.priceMinCents != null && s.priceMaxCents != null) return `${formatBRL(s.priceMinCents)} – ${formatBRL(s.priceMaxCents)}`;
+      if (s.priceMinCents != null && s.priceMaxCents != null)
+        return `${formatBRL(s.priceMinCents)} – ${formatBRL(s.priceMaxCents)}`;
       if (s.priceMinCents != null) return `A partir de ${formatBRL(s.priceMinCents)}`;
       return 'Faixa de preço na confirmação';
     default:
@@ -52,14 +57,35 @@ export interface ServiceCardProps {
 }
 
 /** Cartão de serviço: `tile` para carrosséis (capa 3:2) e `row` para listas. */
-export function ServiceCard({ service, variant = 'tile', badge, reason, onPress, width = 176 }: ServiceCardProps) {
+export function ServiceCard({
+  service,
+  variant = 'tile',
+  badge,
+  reason,
+  onPress,
+  width = 176,
+}: ServiceCardProps) {
   const { colors, radius, elevation } = useTheme();
   const duration = durationLine(service.estimatedDurationMinutes);
   const cover = (size: { w: number | string; h: number }) =>
     service.imageUrl ? (
-      <Image source={{ uri: service.imageUrl }} style={{ width: size.w as number, height: size.h, borderRadius: variant === 'row' ? radius.md : 0 }} />
+      <Image
+        source={{ uri: service.imageUrl }}
+        style={{ width: size.w as number, height: size.h, borderRadius: variant === 'row' ? radius.md : 0 }}
+      />
     ) : (
-      <View style={[{ width: size.w as number, height: size.h, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', borderRadius: variant === 'row' ? radius.md : 0 }]}>
+      <View
+        style={[
+          {
+            width: size.w as number,
+            height: size.h,
+            backgroundColor: colors.primarySoft,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: variant === 'row' ? radius.md : 0,
+          },
+        ]}
+      >
         <Icon name="tool" size={variant === 'row' ? 'lg' : 'xl'} color={colors.primary} />
       </View>
     );
@@ -70,7 +96,15 @@ export function ServiceCard({ service, variant = 'tile', badge, reason, onPress,
         accessibilityRole="button"
         accessibilityLabel={`${service.name}, ${priceLine(service)}`}
         onPress={onPress}
-        style={({ pressed }) => [styles.row, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.lg, opacity: pressed ? 0.85 : 1 }]}
+        style={({ pressed }) => [
+          styles.row,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderRadius: radius.lg,
+            opacity: pressed ? 0.85 : 1,
+          },
+        ]}
       >
         {cover({ w: 56, h: 56 })}
         <View style={styles.rowTexts}>
@@ -108,7 +142,13 @@ export function ServiceCard({ service, variant = 'tile', badge, reason, onPress,
       onPress={onPress}
       style={({ pressed }) => [
         styles.tile,
-        { width, backgroundColor: colors.surface, borderRadius: radius.lg, borderColor: colors.border, ...elevation.sm },
+        {
+          width,
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderColor: colors.border,
+          ...elevation.sm,
+        },
         pressed ? { transform: [{ scale: 0.99 }] } : null,
       ]}
     >
@@ -139,6 +179,12 @@ const styles = StyleSheet.create({
   tile: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   tileBody: { padding: 12, gap: 4 },
   badge: { position: 'absolute', top: 8, left: 8 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderWidth: StyleSheet.hairlineWidth },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   rowTexts: { flex: 1, gap: 2 },
 });

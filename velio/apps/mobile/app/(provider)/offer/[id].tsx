@@ -1,6 +1,6 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatBRL } from '@velio/contracts';
 import { Button, CardSkeleton, StatusPill, Text, useTheme, useToast } from '@velio/ui/native';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -38,39 +38,54 @@ export default function OfferScreen() {
     else router.replace('/(provider)/(tabs)');
   }
 
+  const announced = useRef<string | null>(null);
   useEffect(() => {
-    if (offer) {
-      track('offer_received', { distanceKm: offer.summary.distanceKm, payoutCents: offer.summary.providerPayoutCents }, offer.orderId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    }
-  }, [offer?.id]); // biome-ignore lint/correctness/useExhaustiveDependencies: dispara uma vez por oferta
+    if (!offer || announced.current === offer.id) return;
+    announced.current = offer.id;
+    track(
+      'offer_received',
+      { distanceKm: offer.summary.distanceKm, payoutCents: offer.summary.providerPayoutCents },
+      offer.orderId,
+    );
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+  }, [offer]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fecha quando a oferta some da lista
   useEffect(() => {
     if (offers.isSuccess && !offer) {
       toast.show({ message: 'Oferta expirada.', tone: 'warning' });
       close();
     }
-  }, [offers.isSuccess, offer]); // biome-ignore lint/correctness/useExhaustiveDependencies: fecha ao sumir
+  }, [offers.isSuccess, offer]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fecha quando a oferta é decidida
   useEffect(() => {
     if (offer && offer.response !== 'PENDING') {
-      toast.show({ message: offer.response === 'EXPIRED' ? 'Oferta expirada.' : 'Esta oferta não está mais disponível.', tone: 'warning' });
+      toast.show({
+        message: offer.response === 'EXPIRED' ? 'Oferta expirada.' : 'Esta oferta não está mais disponível.',
+        tone: 'warning',
+      });
       close();
     }
-  }, [offer?.response]); // biome-ignore lint/correctness/useExhaustiveDependencies: fecha ao decidir
+  }, [offer?.response]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fecha ao expirar a contagem
   useEffect(() => {
     if (offer && remaining <= 0) {
       track('offer_expired', {}, offer.orderId);
       toast.show({ message: 'Oferta expirada.', tone: 'warning' });
       close();
     }
-  }, [remaining, offer]); // biome-ignore lint/correctness/useExhaustiveDependencies: fecha ao expirar
+  }, [remaining, offer?.id]);
 
   const accept = useMutation({
     mutationFn: () => api.provider.acceptOffer(id),
     onSuccess: (order) => {
-      track('offer_accepted', { secondsToDecide: Math.round((Date.now() - openedAt.current) / 1000) }, order.id);
+      track(
+        'offer_accepted',
+        { secondsToDecide: Math.round((Date.now() - openedAt.current) / 1000) },
+        order.id,
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       updateCache(order);
       qc.invalidateQueries({ queryKey: qk.provider.offers });
@@ -79,14 +94,21 @@ export default function OfferScreen() {
       router.replace(`/(provider)/order/${order.id}`);
     },
     onError: (e) => {
-      toast.show({ message: isConflict(e) ? 'Esta oferta já foi aceita por outro profissional.' : errorMessage(e), tone: 'error' });
+      toast.show({
+        message: isConflict(e) ? 'Esta oferta já foi aceita por outro profissional.' : errorMessage(e),
+        tone: 'error',
+      });
       if (isConflict(e)) close();
     },
   });
   const reject = useMutation({
     mutationFn: () => api.provider.rejectOffer(id),
     onSuccess: () => {
-      track('offer_rejected', { secondsToDecide: Math.round((Date.now() - openedAt.current) / 1000) }, offer?.orderId);
+      track(
+        'offer_rejected',
+        { secondsToDecide: Math.round((Date.now() - openedAt.current) / 1000) },
+        offer?.orderId,
+      );
       close();
     },
     onError: (e) => toast.show({ message: errorMessage(e), tone: 'error' }),
@@ -94,30 +116,56 @@ export default function OfferScreen() {
 
   if (!offer) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: insets.top + spacing[4], paddingHorizontal: spacing[5] }]}>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: colors.bg, paddingTop: insets.top + spacing[4], paddingHorizontal: spacing[5] },
+        ]}
+      >
         <CardSkeleton height={320} />
       </View>
     );
   }
   const s = offer.summary;
-  const total = Math.max(1, (new Date(offer.expiresAt).getTime() - new Date(offer.offeredAt).getTime()) / 1000);
+  const total = Math.max(
+    1,
+    (new Date(offer.expiresAt).getTime() - new Date(offer.offeredAt).getTime()) / 1000,
+  );
   const progress = Math.max(0, Math.min(1, remaining / total));
   const urgent = remaining <= 10;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: insets.top, paddingBottom: insets.bottom + spacing[4] }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: colors.bg, paddingTop: insets.top, paddingBottom: insets.bottom + spacing[4] },
+      ]}
+    >
       <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: urgent ? colors.danger : colors.primary }]} />
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${progress * 100}%`, backgroundColor: urgent ? colors.danger : colors.primary },
+          ]}
+        />
       </View>
       <View style={{ paddingHorizontal: spacing[5], gap: spacing[5], flex: 1 }}>
         <View style={styles.rowBetween}>
           <Text variant="labelSm" color="muted">
             Nova oferta
           </Text>
-          <StatusPill label="Responder em" countdown={formatCountdown(remaining)} tone={urgent ? 'danger' : remaining <= 30 ? 'warning' : 'info'} />
+          <StatusPill
+            label="Responder em"
+            countdown={formatCountdown(remaining)}
+            tone={urgent ? 'danger' : remaining <= 30 ? 'warning' : 'info'}
+          />
         </View>
         <View>
-          <Text variant="display" accessibilityLabel={`Remuneração ${s.providerPayoutCents != null ? formatBRL(s.providerPayoutCents) : 'sob orçamento'}`} style={{ fontVariant: ['tabular-nums'] }}>
+          <Text
+            variant="display"
+            accessibilityLabel={`Remuneração ${s.providerPayoutCents != null ? formatBRL(s.providerPayoutCents) : 'sob orçamento'}`}
+            style={{ fontVariant: ['tabular-nums'] }}
+          >
             {s.providerPayoutCents != null ? formatBRL(s.providerPayoutCents) : 'Sob orçamento'}
           </Text>
           {s.priceCents != null ? (
@@ -137,7 +185,12 @@ export default function OfferScreen() {
           <Fact label="Local" value={s.approxLocation.neighborhood} />
           <Fact label="Quando" value={s.scheduledFor ? formatSchedule(s.scheduledFor) : 'Agora'} />
         </View>
-        <OrderMap destination={{ lat: s.approxLocation.lat, lng: s.approxLocation.lng }} approxRadiusM={600} height={150} accessibilitySummary={`Região aproximada: ${s.approxLocation.neighborhood}, ${s.approxLocation.city}, a ${formatDistanceKm(s.distanceKm)}`} />
+        <OrderMap
+          destination={{ lat: s.approxLocation.lat, lng: s.approxLocation.lng }}
+          approxRadiusM={600}
+          height={150}
+          accessibilitySummary={`Região aproximada: ${s.approxLocation.neighborhood}, ${s.approxLocation.city}, a ${formatDistanceKm(s.distanceKm)}`}
+        />
         <View style={{ gap: 4 }}>
           {s.estimatedDurationMinutes ? (
             <Text variant="body" color="muted">
@@ -151,8 +204,20 @@ export default function OfferScreen() {
           ) : null}
         </View>
         <View style={{ flex: 1 }} />
-        <Button label="Aceitar" size="xl" onPress={() => accept.mutate()} loading={accept.isPending} disabled={reject.isPending} />
-        <Button label="Recusar" variant="ghost" onPress={() => reject.mutate()} loading={reject.isPending} disabled={accept.isPending} />
+        <Button
+          label="Aceitar"
+          size="xl"
+          onPress={() => accept.mutate()}
+          loading={accept.isPending}
+          disabled={reject.isPending}
+        />
+        <Button
+          label="Recusar"
+          variant="ghost"
+          onPress={() => reject.mutate()}
+          loading={reject.isPending}
+          disabled={accept.isPending}
+        />
       </View>
     </View>
   );

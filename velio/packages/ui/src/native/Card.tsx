@@ -15,7 +15,16 @@ export interface CardProps extends ViewProps {
 }
 
 /** Superfície agrupadora. `onPress` torna o cartão interativo (escala 0,99 ao pressionar). */
-export function Card({ variant = 'outlined', padding, onPress, selected, children, style, accessibilityLabel, ...rest }: CardProps) {
+export function Card({
+  variant = 'outlined',
+  padding,
+  onPress,
+  selected,
+  children,
+  style,
+  accessibilityLabel,
+  ...rest
+}: CardProps) {
   const { colors, radius, elevation, spacing } = useTheme();
   const base: ViewStyle = {
     backgroundColor: colors.surface,

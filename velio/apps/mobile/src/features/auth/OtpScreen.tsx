@@ -1,6 +1,6 @@
-import { Button, OTPInput, Text, useToast } from '@velio/ui/native';
-import { ApiRequestError } from '@velio/api-client';
 import { useMutation } from '@tanstack/react-query';
+import { ApiRequestError } from '@velio/api-client';
+import { Button, OTPInput, Text, useToast } from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -19,7 +19,12 @@ export function OtpScreen() {
   const router = useRouter();
   const toast = useToast();
   const session = useSession();
-  const params = useLocalSearchParams<{ challengeId: string; phone: string; devCode?: string; expiresIn?: string }>();
+  const params = useLocalSearchParams<{
+    challengeId: string;
+    phone: string;
+    devCode?: string;
+    expiresIn?: string;
+  }>();
   const [challengeId, setChallengeId] = useState(params.challengeId ?? '');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -33,14 +38,19 @@ export function OtpScreen() {
 
   const verify = useMutation({
     mutationFn: (c: string) =>
-      api.auth.verifyOtp({ challengeId, code: c, deviceName: Platform.OS === 'web' ? 'web' : `${Platform.OS} ${Platform.Version}` }),
+      api.auth.verifyOtp({
+        challengeId,
+        code: c,
+        deviceName: Platform.OS === 'web' ? 'web' : `${Platform.OS} ${Platform.Version}`,
+      }),
     onSuccess: async (tokens) => {
       await session.signIn(tokens);
       if (tokens.needsOnboarding) router.replace(`/(${APP_ROLE})/(auth)/profile`);
     },
     onError: (e) => {
       setCode('');
-      if (e instanceof ApiRequestError && e.status === 429) setError('Muitas tentativas. Tente novamente em 15 min.');
+      if (e instanceof ApiRequestError && e.status === 429)
+        setError('Muitas tentativas. Tente novamente em 15 min.');
       else setError(errorMessage(e, 'Código inválido. Confira e tente de novo.'));
     },
   });
@@ -58,7 +68,17 @@ export function OtpScreen() {
   });
 
   return (
-    <Screen keyboard footer={<Button label="Confirmar código" onPress={() => verify.mutate(code)} loading={verify.isPending} disabled={code.length !== 6} />}>
+    <Screen
+      keyboard
+      footer={
+        <Button
+          label="Confirmar código"
+          onPress={() => verify.mutate(code)}
+          loading={verify.isPending}
+          disabled={code.length !== 6}
+        />
+      }
+    >
       <Header title="Confirmar celular" />
       <View style={styles.body}>
         <Text variant="title">Digite o código</Text>
@@ -66,7 +86,15 @@ export function OtpScreen() {
           Enviado por SMS para {maskPhoneBR(params.phone ?? '')}.
         </Text>
         <View style={styles.otp}>
-          <OTPInput length={6} value={code} onChange={setCode} onComplete={(c) => verify.mutate(c)} error={Boolean(error)} disabled={verify.isPending} autoFocus />
+          <OTPInput
+            length={6}
+            value={code}
+            onChange={setCode}
+            onComplete={(c) => verify.mutate(c)}
+            error={Boolean(error)}
+            disabled={verify.isPending}
+            autoFocus
+          />
         </View>
         {error ? (
           <Text variant="bodySm" color="danger" align="center" accessibilityLiveRegion="polite">
@@ -78,7 +106,12 @@ export function OtpScreen() {
             Ambiente de teste: código {params.devCode}
           </Text>
         ) : null}
-        <Pressable onPress={() => resend.mutate()} disabled={cooldown > 0 || resend.isPending} accessibilityRole="button" style={styles.resend}>
+        <Pressable
+          onPress={() => resend.mutate()}
+          disabled={cooldown > 0 || resend.isPending}
+          accessibilityRole="button"
+          style={styles.resend}
+        >
           <Text variant="label" color={cooldown > 0 ? 'muted' : 'brand'} align="center">
             {cooldown > 0 ? `Reenviar código em ${cooldown} s` : 'Reenviar código'}
           </Text>

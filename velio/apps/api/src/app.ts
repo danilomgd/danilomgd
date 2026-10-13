@@ -71,6 +71,8 @@ export async function buildApp(opts: BuildOptions = {}): Promise<App> {
   await fastify.register(rateLimit, {
     max: cfg.RATE_LIMIT_MAX,
     timeWindow: '1 minute',
+    // preHandler: o corpo já está disponível para chaves por telefone (rotas de OTP).
+    hook: 'preHandler',
     keyGenerator: (req) => req.auth?.userId ?? req.ip,
   });
 
@@ -90,7 +92,10 @@ export async function buildApp(opts: BuildOptions = {}): Promise<App> {
     try {
       done(null, JSON.parse(body as string));
     } catch (e) {
-      done(e as Error, undefined);
+      // JSON malformado é erro do cliente (400), não falha interna.
+      const err = e as Error & { statusCode?: number };
+      err.statusCode = 400;
+      done(err, undefined);
     }
   });
 

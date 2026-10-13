@@ -1,5 +1,5 @@
-import { EmptyState, ListItem, ListSkeleton } from '@velio/ui/native';
 import { useQuery } from '@tanstack/react-query';
+import { EmptyState, ListItem, ListSkeleton } from '@velio/ui/native';
 import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 import { Header } from '@/components/Header';
@@ -43,7 +43,11 @@ export function NotificationsScreen() {
               })}
             </View>
           ) : (
-            <EmptyState icon="bell" title="Nenhuma notificação" description="Avisos sobre seus pedidos aparecem aqui." />
+            <EmptyState
+              icon="bell"
+              title="Nenhuma notificação"
+              description="Avisos sobre seus pedidos aparecem aqui."
+            />
           )
         }
       </QueryState>

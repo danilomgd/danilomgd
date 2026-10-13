@@ -1,6 +1,16 @@
-import { formatBRL } from '@velio/contracts';
-import { Button, Card, CardSkeleton, ErrorState, Input, StatusPill, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { formatBRL, ORDER_STATUS_LABELS } from '@velio/contracts';
+import {
+  Button,
+  Card,
+  CardSkeleton,
+  ErrorState,
+  Input,
+  StatusPill,
+  Text,
+  useTheme,
+  useToast,
+} from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -13,7 +23,6 @@ import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/errors';
 import { formatSchedule } from '@/lib/format';
 import { qk } from '@/lib/query';
-import { ORDER_STATUS_LABELS } from '@velio/contracts';
 
 const TASK_KIND: Record<string, string> = {
   VEHICLE_PICKUP: 'Retirada do veículo',
@@ -53,7 +62,11 @@ export default function ConciergeDetailScreen() {
     onError: (e) => toast.show({ message: errorMessage(e), tone: 'error' }),
   });
   const answer = useMutation({
-    mutationFn: () => api.concierge.answer(id, Object.entries(answers).map(([question, a]) => ({ question, answer: a }))),
+    mutationFn: () =>
+      api.concierge.answer(
+        id,
+        Object.entries(answers).map(([question, a]) => ({ question, answer: a })),
+      ),
     onSuccess: () => {
       setAnswers({});
       request.refetch();
@@ -66,7 +79,8 @@ export default function ConciergeDetailScreen() {
   const plan = r?.plan;
   const status = order?.status;
   const pendingQuote = order?.quotes.find((q) => q.status === 'SENT');
-  const canApprovePlan = status === 'PLAN_PROPOSED' || (order?.allowedActions.includes('customer.approve_plan') ?? false);
+  const canApprovePlan =
+    status === 'PLAN_PROPOSED' || (order?.allowedActions.includes('customer.approve_plan') ?? false);
   const clarifications = plan?.clarifications ?? [];
   const allAnswered = clarifications.every((c) => (answers[c] ?? '').trim().length > 0);
 
@@ -78,7 +92,10 @@ export default function ConciergeDetailScreen() {
         plan && canApprovePlan ? (
           <Button label="Aprovar plano" onPress={() => approve.mutate()} loading={approve.isPending} />
         ) : pendingQuote && order ? (
-          <Button label={`Ver orçamento de ${formatBRL(pendingQuote.amountCents)}`} onPress={() => router.push(`/(customer)/order/${order.id}`)} />
+          <Button
+            label={`Ver orçamento de ${formatBRL(pendingQuote.amountCents)}`}
+            onPress={() => router.push(`/(customer)/order/${order.id}`)}
+          />
         ) : null
       }
     >
@@ -91,7 +108,9 @@ export default function ConciergeDetailScreen() {
         <View style={{ gap: spacing[6] }}>
           <View style={{ gap: spacing[2] }}>
             {status ? <StatusPill label={ORDER_STATUS_LABELS[status].label} status={status} /> : null}
-            <Text variant="title">{status ? ORDER_STATUS_LABELS[status].customer : 'Montando um plano para você.'}</Text>
+            <Text variant="title">
+              {status ? ORDER_STATUS_LABELS[status].customer : 'Montando um plano para você.'}
+            </Text>
             {r.rawText || r.transcript ? (
               <Text variant="body" color="muted">
                 “{r.transcript ?? r.rawText}”
@@ -124,9 +143,32 @@ export default function ConciergeDetailScreen() {
                     .map((t) => {
                       const orderTask = order?.tasks.find((ot) => ot.seq === t.seq);
                       return (
-                        <View key={t.seq} style={[styles.task, { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radius.md }]}>
-                          <View style={[styles.seq, { backgroundColor: orderTask?.status === 'DONE' ? colors.success : colors.primarySoft }]}>
-                            <Text variant="labelSm" style={{ color: orderTask?.status === 'DONE' ? colors.textOnPrimary : colors.primary }}>
+                        <View
+                          key={t.seq}
+                          style={[
+                            styles.task,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                              borderRadius: radius.md,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.seq,
+                              {
+                                backgroundColor:
+                                  orderTask?.status === 'DONE' ? colors.success : colors.primarySoft,
+                              },
+                            ]}
+                          >
+                            <Text
+                              variant="labelSm"
+                              style={{
+                                color: orderTask?.status === 'DONE' ? colors.textOnPrimary : colors.primary,
+                              }}
+                            >
                               {t.seq}
                             </Text>
                           </View>
@@ -144,7 +186,13 @@ export default function ConciergeDetailScreen() {
                             ) : null}
                           </View>
                           {orderTask?.childOrderId ? (
-                            <Button label="Ver" variant="ghost" size="md" fullWidth={false} onPress={() => router.push(`/(customer)/order/${orderTask.childOrderId}`)} />
+                            <Button
+                              label="Ver"
+                              variant="ghost"
+                              size="md"
+                              fullWidth={false}
+                              onPress={() => router.push(`/(customer)/order/${orderTask.childOrderId}`)}
+                            />
                           ) : null}
                         </View>
                       );
@@ -156,15 +204,31 @@ export default function ConciergeDetailScreen() {
                 <Section title="Precisamos saber">
                   <View style={{ gap: spacing[3] }}>
                     {clarifications.map((q) => (
-                      <Input key={q} label={q} value={answers[q] ?? ''} onChangeText={(t) => setAnswers((a) => ({ ...a, [q]: t }))} maxLength={500} />
+                      <Input
+                        key={q}
+                        label={q}
+                        value={answers[q] ?? ''}
+                        onChangeText={(t) => setAnswers((a) => ({ ...a, [q]: t }))}
+                        maxLength={500}
+                      />
                     ))}
-                    <Button label="Enviar respostas" variant="secondary" onPress={() => answer.mutate()} loading={answer.isPending} disabled={!allAnswered} />
+                    <Button
+                      label="Enviar respostas"
+                      variant="secondary"
+                      onPress={() => answer.mutate()}
+                      loading={answer.isPending}
+                      disabled={!allAnswered}
+                    />
                   </View>
                 </Section>
               ) : null}
 
               {order ? (
-                <Button label="Ver acompanhamento completo" variant="ghost" onPress={() => router.push(`/(customer)/order/${order.id}`)} />
+                <Button
+                  label="Ver acompanhamento completo"
+                  variant="ghost"
+                  onPress={() => router.push(`/(customer)/order/${order.id}`)}
+                />
               ) : null}
             </>
           )}
@@ -175,6 +239,12 @@ export default function ConciergeDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  task: { flexDirection: 'row', gap: 12, padding: 12, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center' },
+  task: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+  },
   seq: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });

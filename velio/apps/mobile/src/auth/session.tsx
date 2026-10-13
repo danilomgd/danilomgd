@@ -1,7 +1,7 @@
 import type { AuthTokens, UserPublic } from '@velio/contracts';
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, onUnauthorized } from '@/lib/api';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { flushAnalytics } from '@/lib/analytics';
+import { api, onUnauthorized } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { disconnectRealtime } from '@/lib/realtime';
 import { type StoredSession, sessionStorage } from '@/lib/storage';

@@ -22,13 +22,40 @@ export default function AccountScreen() {
           </Text>
         </View>
       </View>
-      <ListItem title="Endereços" icon="map-pin" onPress={() => router.push('/(customer)/account/addresses')} />
+      <ListItem
+        title="Endereços"
+        icon="map-pin"
+        onPress={() => router.push('/(customer)/account/addresses')}
+      />
       <ListItem title="Veículos" icon="truck" onPress={() => router.push('/(customer)/account/vehicles')} />
-      <ListItem title="Equipamentos" icon="wind" onPress={() => router.push('/(customer)/account/equipments')} />
-      <ListItem title="Pagamento" icon="credit-card" onPress={() => router.push('/(customer)/account/payment-methods')} />
-      <ListItem title="Assinaturas" icon="calendar" onPress={() => router.push('/(customer)/subscriptions/plans')} />
-      <ListItem title="Notificações" icon="bell" onPress={() => router.push('/(customer)/account/notifications')} />
-      <ListItem title="Sair" icon="log-out" destructive divider={false} onPress={() => session.signOut()} chevron={false} />
+      <ListItem
+        title="Equipamentos"
+        icon="wind"
+        onPress={() => router.push('/(customer)/account/equipments')}
+      />
+      <ListItem
+        title="Pagamento"
+        icon="credit-card"
+        onPress={() => router.push('/(customer)/account/payment-methods')}
+      />
+      <ListItem
+        title="Assinaturas"
+        icon="calendar"
+        onPress={() => router.push('/(customer)/subscriptions/plans')}
+      />
+      <ListItem
+        title="Notificações"
+        icon="bell"
+        onPress={() => router.push('/(customer)/account/notifications')}
+      />
+      <ListItem
+        title="Sair"
+        icon="log-out"
+        destructive
+        divider={false}
+        onPress={() => session.signOut()}
+        chevron={false}
+      />
       <Text variant="caption" color="muted" align="center" style={{ marginTop: spacing[8] }}>
         VÉLIO {APP_VERSION}
       </Text>

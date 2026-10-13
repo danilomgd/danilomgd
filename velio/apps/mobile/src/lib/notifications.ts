@@ -1,8 +1,8 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { api } from './api';
 import { track } from './analytics';
+import { api } from './api';
 import { IS_PROVIDER_APP } from './config';
 
 Notifications.setNotificationHandler({
@@ -40,16 +40,20 @@ export interface NotificationTarget {
 }
 
 /** Deep link a partir de `data` da notificação: `orderId`, `offerId`, `conciergeId` ou `path` explícito. */
-export function resolveNotificationTarget(data: Record<string, unknown> | undefined): NotificationTarget | null {
+export function resolveNotificationTarget(
+  data: Record<string, unknown> | undefined,
+): NotificationTarget | null {
   if (!data) return null;
   const group = IS_PROVIDER_APP ? '/(provider)' : '/(customer)';
   if (typeof data.path === 'string' && data.path.startsWith('/')) return { path: data.path };
   if (IS_PROVIDER_APP && typeof data.offerId === 'string') return { path: `${group}/offer/${data.offerId}` };
   if (typeof data.orderId === 'string') {
-    const sub = typeof data.screen === 'string' && ['chat', 'review'].includes(data.screen) ? `/${data.screen}` : '';
+    const sub =
+      typeof data.screen === 'string' && ['chat', 'review'].includes(data.screen) ? `/${data.screen}` : '';
     return { path: `${group}/order/${data.orderId}${sub}`, orderId: data.orderId };
   }
-  if (!IS_PROVIDER_APP && typeof data.conciergeId === 'string') return { path: `${group}/concierge/${data.conciergeId}` };
+  if (!IS_PROVIDER_APP && typeof data.conciergeId === 'string')
+    return { path: `${group}/concierge/${data.conciergeId}` };
   return null;
 }
 
@@ -58,7 +62,11 @@ export function listenNotificationOpens(navigate: (path: string) => void): () =>
   const handle = (response: Notifications.NotificationResponse) => {
     const data = response.notification.request.content.data as Record<string, unknown> | undefined;
     const target = resolveNotificationTarget(data);
-    track('notification_opened', { kind: typeof data?.kind === 'string' ? data.kind : null }, target?.orderId);
+    track(
+      'notification_opened',
+      { kind: typeof data?.kind === 'string' ? data.kind : null },
+      target?.orderId,
+    );
     if (target) navigate(target.path);
   };
   const sub = Notifications.addNotificationResponseReceivedListener(handle);

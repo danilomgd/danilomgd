@@ -16,8 +16,14 @@ export function useRealtimeInvalidation(role: 'customer' | 'provider') {
         if (role === 'provider') qc.invalidateQueries({ queryKey: qk.provider.me });
       }),
       subscribe('notification.created', () => qc.invalidateQueries({ queryKey: qk.notifications })),
-      subscribe('message.created', (p) => p.orderId && qc.invalidateQueries({ queryKey: qk.messages(p.orderId) })),
-      subscribe('payment.updated', (p) => p.orderId && qc.invalidateQueries({ queryKey: qk.payments(p.orderId) })),
+      subscribe(
+        'message.created',
+        (p) => p.orderId && qc.invalidateQueries({ queryKey: qk.messages(p.orderId) }),
+      ),
+      subscribe(
+        'payment.updated',
+        (p) => p.orderId && qc.invalidateQueries({ queryKey: qk.payments(p.orderId) }),
+      ),
     ];
     if (role === 'provider') {
       offs.push(

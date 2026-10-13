@@ -44,5 +44,11 @@ export function StatusPill({ label, status, tone, solid, icon, size = 'md', coun
 }
 
 const styles = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, alignSelf: 'flex-start' },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
+  },
 });

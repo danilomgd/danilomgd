@@ -60,7 +60,7 @@ export function createAnalyticsService(ctx: AppContext) {
       const [arrival] = await db
         .select({ secs: sql<number | null>`avg(extract(epoch from (${orderEvents.createdAt} - ${serviceOrders.acceptedAt})))` })
         .from(orderEvents)
-        .innerJoin(serviceOrders, eq(serviceOrders.id, orderEvents.orderId))
+        .innerJoin(serviceOrders, eq(sql`${serviceOrders.id}::text`, orderEvents.orderId))
         .where(and(eq(orderEvents.toStatus, 'ARRIVED'), sql`${serviceOrders.acceptedAt} is not null`, inPeriod));
       const perCustomer = db
         .select({ customerId: serviceOrders.customerId, n: count().as('n') })

@@ -26,6 +26,7 @@ export class AnalyticsQueue {
   private queue: QueuedEvent[] = [];
   private timer: unknown = null;
   private flushing: Promise<void> | null = null;
+  private failedAt: number | null = null;
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
   private readonly maxQueue: number;
@@ -47,7 +48,9 @@ export class AnalyticsQueue {
     if (orderId) event.orderId = orderId;
     this.queue.push(event);
     if (this.queue.length > this.maxQueue) this.queue.splice(0, this.queue.length - this.maxQueue);
-    if (this.queue.length >= this.batchSize) {
+    const now = (this.o.now ?? Date.now)();
+    const backingOff = this.failedAt !== null && now - this.failedAt < this.flushIntervalMs;
+    if (this.queue.length >= this.batchSize && !backingOff) {
       void this.flush();
     } else {
       this.schedule();
@@ -72,17 +75,23 @@ export class AnalyticsQueue {
     }
     if (this.queue.length === 0) return Promise.resolve();
     const batch = this.queue.splice(0, 100);
+    let ok = false;
     this.flushing = this.o
       .send(batch)
+      .then(() => {
+        ok = true;
+        this.failedAt = null;
+      })
       .catch(() => {
-        // devolve ao início da fila preservando ordem; tenta de novo no próximo ciclo
+        // devolve ao início da fila preservando ordem; tenta de novo só no próximo ciclo (sem loop)
+        this.failedAt = (this.o.now ?? Date.now)();
         this.queue.unshift(...batch);
         if (this.queue.length > this.maxQueue) this.queue.length = this.maxQueue;
         this.schedule();
       })
       .finally(() => {
         this.flushing = null;
-        if (this.queue.length >= this.batchSize) void this.flush();
+        if (ok && this.queue.length >= this.batchSize) void this.flush();
       });
     return this.flushing;
   }

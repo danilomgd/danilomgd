@@ -76,7 +76,7 @@ export async function createTestApp(opts: { now?: Date } = {}) {
     background: false,
     realtime: false,
     adapters: { clock },
-    config: { JWT_ACCESS_TTL_SECONDS: 3650 * 86_400, LOG_LEVEL: 'silent', RATE_LIMIT_MAX: 100_000 },
+    config: { JWT_ACCESS_TTL_SECONDS: 3650 * 86_400, LOG_LEVEL: process.env.TEST_LOG_LEVEL ?? 'silent', RATE_LIMIT_MAX: 100_000 },
   });
   await app.fastify.ready();
   const { fastify, ctx } = app;

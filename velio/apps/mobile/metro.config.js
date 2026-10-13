@@ -8,7 +8,10 @@ const config = getDefaultConfig(projectRoot);
 
 // Monorepo pnpm: observa os pacotes do workspace e resolve módulos a partir do app e da raiz.
 config.watchFolders = [monorepoRoot];
-config.resolver.nodeModulesPaths = [path.resolve(projectRoot, 'node_modules'), path.resolve(monorepoRoot, 'node_modules')];
+config.resolver.nodeModulesPaths = [
+  path.resolve(projectRoot, 'node_modules'),
+  path.resolve(monorepoRoot, 'node_modules'),
+];
 
 // Módulos que precisam de uma única instância no bundle (contexto React, módulos nativos).
 // `packages/ui` declara-os como peer e tem cópia própria em dev; aqui forçamos a cópia do app.
@@ -43,7 +46,11 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   const pkg = packageNameOf(moduleName);
   const resolve = defaultResolveRequest ?? context.resolveRequest;
   if (pkg && singletons.has(pkg) && !context.originModulePath.startsWith(projectRoot)) {
-    return resolve({ ...context, originModulePath: path.join(projectRoot, 'index.js') }, moduleName, platform);
+    return resolve(
+      { ...context, originModulePath: path.join(projectRoot, 'index.js') },
+      moduleName,
+      platform,
+    );
   }
   return resolve(context, moduleName, platform);
 };

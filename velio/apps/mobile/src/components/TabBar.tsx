@@ -1,5 +1,5 @@
-import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Badge, Icon, type IconProps, Text, useTheme } from '@velio/ui/native';
+import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +22,17 @@ export function TabBar({ state, navigation, tabs, above, badges }: TabBarProps) 
   const { colors, elevation } = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.wrap, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: insets.bottom, ...elevation.md }]}>
+    <View
+      style={[
+        styles.wrap,
+        {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          paddingBottom: insets.bottom,
+          ...elevation.md,
+        },
+      ]}
+    >
       {above}
       <View style={styles.row} accessibilityRole="tablist">
         {tabs.map((tab) => {
@@ -38,7 +48,11 @@ export function TabBar({ state, navigation, tabs, above, badges }: TabBarProps) 
               accessibilityLabel={tab.label}
               onPress={() => {
                 if (!route) return;
-                const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
                 if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
               }}
               style={styles.tab}
@@ -51,7 +65,13 @@ export function TabBar({ state, navigation, tabs, above, badges }: TabBarProps) 
                   </View>
                 ) : null}
               </View>
-              <Text variant="caption" style={{ color: focused ? colors.primary : colors.textMuted, fontWeight: focused ? '600' : '400' }}>
+              <Text
+                variant="caption"
+                style={{
+                  color: focused ? colors.primary : colors.textMuted,
+                  fontWeight: focused ? '600' : '400',
+                }}
+              >
                 {tab.label}
               </Text>
             </Pressable>

@@ -17,7 +17,17 @@ export function EmptyState({ icon = 'inbox', title, description, action, compact
   const { colors } = useTheme();
   return (
     <View style={[styles.wrap, compact ? styles.compact : null]} accessibilityRole="summary">
-      <View style={[styles.circle, { backgroundColor: colors.primarySoft, width: compact ? 48 : 72, height: compact ? 48 : 72, borderRadius: compact ? 24 : 36 }]}>
+      <View
+        style={[
+          styles.circle,
+          {
+            backgroundColor: colors.primarySoft,
+            width: compact ? 48 : 72,
+            height: compact ? 48 : 72,
+            borderRadius: compact ? 24 : 36,
+          },
+        ]}
+      >
         <Icon name={icon} size={compact ? 'lg' : 'xl'} color={colors.primary} />
       </View>
       <Text variant={compact ? 'heading' : 'titleSm'} align="center">
@@ -28,13 +38,35 @@ export function EmptyState({ icon = 'inbox', title, description, action, compact
           {description}
         </Text>
       ) : null}
-      {action ? <Button label={action.label} variant="secondary" onPress={action.onPress} loading={action.loading} fullWidth={false} size="md" style={{ marginTop: 8 }} /> : null}
+      {action ? (
+        <Button
+          label={action.label}
+          variant="secondary"
+          onPress={action.onPress}
+          loading={action.loading}
+          fullWidth={false}
+          size="md"
+          style={{ marginTop: 8 }}
+        />
+      ) : null}
     </View>
   );
 }
 
 /** Estado de erro com "Tentar novamente". */
-export function ErrorState({ title = 'Não foi possível carregar', description, onRetry, retrying, compact }: { title?: string; description?: string; onRetry?: () => void; retrying?: boolean; compact?: boolean }) {
+export function ErrorState({
+  title = 'Não foi possível carregar',
+  description,
+  onRetry,
+  retrying,
+  compact,
+}: {
+  title?: string;
+  description?: string;
+  onRetry?: () => void;
+  retrying?: boolean;
+  compact?: boolean;
+}) {
   return (
     <EmptyState
       icon="alert-circle"

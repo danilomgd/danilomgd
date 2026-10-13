@@ -17,7 +17,11 @@ export default function ProviderLayout() {
   if (authed && gate === 'error') {
     return (
       <View style={[styles.flex, styles.center, { backgroundColor: colors.bg }]}>
-        <ErrorState description={errorMessage(query.error)} onRetry={() => query.refetch()} retrying={query.isFetching} />
+        <ErrorState
+          description={errorMessage(query.error)}
+          onRetry={() => query.refetch()}
+          retrying={query.isFetching}
+        />
       </View>
     );
   }
@@ -37,7 +41,10 @@ export default function ProviderLayout() {
         </Stack.Protected>
         <Stack.Protected guard={authed && gate === 'approved'}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="offer/[id]" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+          <Stack.Screen
+            name="offer/[id]"
+            options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
+          />
           <Stack.Screen name="order/[id]/index" />
           <Stack.Screen name="order/[id]/chat" />
           <Stack.Screen name="order/[id]/quote" options={{ presentation: 'modal' }} />

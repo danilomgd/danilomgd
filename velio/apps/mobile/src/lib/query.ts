@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ApiRequestError } from '@velio/api-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { QueryClient } from '@tanstack/react-query';
+import { ApiRequestError } from '@velio/api-client';
 
 /** Erros de regra (4xx) não devem ser repetidos; falhas de rede sim. */
 function shouldRetry(failureCount: number, error: unknown): boolean {
@@ -29,7 +29,15 @@ export const queryPersister = createAsyncStoragePersister({
 });
 
 /** Só persiste leituras baratas e não sensíveis. */
-export const PERSISTED_QUERY_PREFIXES = ['home', 'categories', 'services', 'service', 'plans', 'orders', 'provider.orders'];
+export const PERSISTED_QUERY_PREFIXES = [
+  'home',
+  'categories',
+  'services',
+  'service',
+  'plans',
+  'orders',
+  'provider.orders',
+];
 
 export function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
   const first = queryKey[0];

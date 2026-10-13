@@ -1,5 +1,5 @@
-import { Button, Input, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation } from '@tanstack/react-query';
+import { Button, Input, Text, useTheme, useToast } from '@velio/ui/native';
 import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -29,7 +29,11 @@ export function PhoneScreen() {
   const request = useMutation({
     mutationFn: (e164: string) => api.auth.requestOtp({ phone: e164, app: APP_ROLE }),
     onSuccess: (r, e164) => {
-      const params = new URLSearchParams({ challengeId: r.challengeId, phone: e164, expiresIn: String(r.expiresInSeconds) });
+      const params = new URLSearchParams({
+        challengeId: r.challengeId,
+        phone: e164,
+        expiresIn: String(r.expiresInSeconds),
+      });
       if (r.devCode) params.set('devCode', r.devCode);
       router.push(`/(${APP_ROLE})/(auth)/otp?${params.toString()}`);
     },
@@ -51,11 +55,23 @@ export function PhoneScreen() {
   }
 
   return (
-    <Screen keyboard footer={<Button label="Continuar" onPress={submit} loading={request.isPending} disabled={phone.replace(/\D/g, '').length < 10} />}>
+    <Screen
+      keyboard
+      footer={
+        <Button
+          label="Continuar"
+          onPress={submit}
+          loading={request.isPending}
+          disabled={phone.replace(/\D/g, '').length < 10}
+        />
+      }
+    >
       <View style={[styles.hero, { paddingTop: spacing[12] }]}>
         <Text variant="display">{APP_NAME}</Text>
         <Text variant="body" color="muted">
-          {IS_PROVIDER_APP ? 'Receba serviços perto de você e seja pago sem burocracia.' : 'Serviços para casa e carro, com acompanhamento ao vivo.'}
+          {IS_PROVIDER_APP
+            ? 'Receba serviços perto de você e seja pago sem burocracia.'
+            : 'Serviços para casa e carro, com acompanhamento ao vivo.'}
         </Text>
       </View>
       <Input

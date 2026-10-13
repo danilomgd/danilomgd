@@ -1,5 +1,5 @@
-import { Button, Chip, Input, Text, useTheme, useToast } from '@velio/ui/native';
 import { useMutation } from '@tanstack/react-query';
+import { Button, Chip, Input, Text, useTheme, useToast } from '@velio/ui/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -31,7 +31,12 @@ export default function DisputeScreen() {
   const [url, setUrl] = useState('');
 
   const submit = useMutation({
-    mutationFn: () => api.orders.openDispute(id, { reason: reason ?? 'OTHER', description: description.trim(), evidenceUrls: urls }),
+    mutationFn: () =>
+      api.orders.openDispute(id, {
+        reason: reason ?? 'OTHER',
+        description: description.trim(),
+        evidenceUrls: urls,
+      }),
     onSuccess: () => {
       track('dispute_opened', { reason: reason ?? 'OTHER' }, id);
       refetch();
@@ -42,7 +47,23 @@ export default function DisputeScreen() {
   });
 
   return (
-    <Screen keyboard footer={<Button label="Enviar contestação" variant="danger" onPress={() => submit.mutate()} loading={submit.isPending} disabled={!reason || description.trim().length < 10} disabledReason={description.trim().length < 10 && reason ? 'Descreva o problema com pelo menos 10 caracteres.' : undefined} />}>
+    <Screen
+      keyboard
+      footer={
+        <Button
+          label="Enviar contestação"
+          variant="danger"
+          onPress={() => submit.mutate()}
+          loading={submit.isPending}
+          disabled={!reason || description.trim().length < 10}
+          disabledReason={
+            description.trim().length < 10 && reason
+              ? 'Descreva o problema com pelo menos 10 caracteres.'
+              : undefined
+          }
+        />
+      }
+    >
       <Header close title="Contestar" />
       <View style={{ gap: spacing[4] }}>
         <Text variant="body" color="muted">
@@ -50,10 +71,22 @@ export default function DisputeScreen() {
         </Text>
         <View style={styles.chips}>
           {REASONS.map((r) => (
-            <Chip key={r.value} label={r.label} selected={reason === r.value} onPress={() => setReason(r.value)} />
+            <Chip
+              key={r.value}
+              label={r.label}
+              selected={reason === r.value}
+              onPress={() => setReason(r.value)}
+            />
           ))}
         </View>
-        <Input kind="multiline" label="O que aconteceu" value={description} onChangeText={setDescription} maxLength={2000} placeholder="Descreva o problema" />
+        <Input
+          kind="multiline"
+          label="O que aconteceu"
+          value={description}
+          onChangeText={setDescription}
+          maxLength={2000}
+          placeholder="Descreva o problema"
+        />
         <Input
           label="Links de fotos ou vídeos (opcional)"
           value={url}
@@ -72,7 +105,11 @@ export default function DisputeScreen() {
         />
         <View style={styles.chips}>
           {urls.map((u) => (
-            <Chip key={u} label={u.replace(/^https?:\/\//, '').slice(0, 28)} onRemove={() => setUrls((cur) => cur.filter((x) => x !== u))} />
+            <Chip
+              key={u}
+              label={u.replace(/^https?:\/\//, '').slice(0, 28)}
+              onRemove={() => setUrls((cur) => cur.filter((x) => x !== u))}
+            />
           ))}
         </View>
       </View>

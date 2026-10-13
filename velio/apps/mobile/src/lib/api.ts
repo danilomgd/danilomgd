@@ -1,4 +1,4 @@
-import { HttpClient, type TokenStore, createApi } from '@velio/api-client';
+import { createApi, HttpClient, type TokenStore } from '@velio/api-client';
 import { API_URL, APP_ROLE } from './config';
 import { sessionStorage } from './storage';
 

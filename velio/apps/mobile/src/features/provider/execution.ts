@@ -1,5 +1,4 @@
 import type { OrderStatus, TransitionAction, WorkflowKind } from '@velio/contracts';
-import { Linking, Platform } from 'react-native';
 
 /** Etapas da linha do tempo horizontal por tipo de workflow (P-13). */
 export const STEPS_BY_KIND: Record<WorkflowKind, Array<{ status: OrderStatus; label: string }>> = {
@@ -65,7 +64,15 @@ export function currentStepIndex(kind: WorkflowKind, status: OrderStatus): numbe
   return steps.findIndex((s) => s.status === target);
 }
 
-export type ActionKind = 'transition' | 'start' | 'complete' | 'quote' | 'cancel' | 'custody' | 'handover' | 'hidden';
+export type ActionKind =
+  | 'transition'
+  | 'start'
+  | 'complete'
+  | 'quote'
+  | 'cancel'
+  | 'custody'
+  | 'handover'
+  | 'hidden';
 
 export interface ActionSpec {
   action: TransitionAction;
@@ -94,7 +101,12 @@ const SPECS: Partial<Record<TransitionAction, Omit<ActionSpec, 'action'>>> = {
   'provider.third_party_done': { label: 'Serviço no destino concluído', kind: 'transition', primary: true },
   'provider.return_pickup': { label: 'Registrar coleta de retorno', kind: 'custody', primary: true },
   'provider.return_depart': { label: 'Voltar ao cliente', kind: 'transition', primary: true },
-  'provider.deliver': { label: 'Registrar entrega', kind: 'custody', handoverStep: 'DELIVERY', primary: true },
+  'provider.deliver': {
+    label: 'Registrar entrega',
+    kind: 'custody',
+    handoverStep: 'DELIVERY',
+    primary: true,
+  },
 };
 
 /** Converte `allowedActions` em botões: uma ação principal, demais secundárias. */
@@ -104,14 +116,24 @@ export function actionSpecs(allowed: TransitionAction[], opts: { quoteAllowed: b
     if (!a.startsWith('provider.')) continue;
     const spec = SPECS[a];
     if (!spec) {
-      out.push({ action: a, label: a.replace('provider.', '').replace(/_/g, ' '), kind: 'transition', primary: false });
+      out.push({
+        action: a,
+        label: a.replace('provider.', '').replace(/_/g, ' '),
+        kind: 'transition',
+        primary: false,
+      });
       continue;
     }
     out.push({ action: a, ...spec });
   }
   // Orçamento adicional durante a execução não muda estado; a API o lista como ação quando permitido.
   if (opts.quoteAllowed && !out.some((o) => o.kind === 'quote')) {
-    out.push({ action: 'provider.submit_quote', label: 'Orçamento adicional', kind: 'quote', primary: false });
+    out.push({
+      action: 'provider.submit_quote',
+      label: 'Orçamento adicional',
+      kind: 'quote',
+      primary: false,
+    });
   }
   // Só uma primária: a primeira na ordem da API.
   let primaryFound = false;
@@ -122,30 +144,4 @@ export function actionSpecs(allowed: TransitionAction[], opts: { quoteAllowed: b
     }
     return { ...o, primary: false };
   });
-}
-
-/** Abre navegação externa: Waze, Google Maps ou Apple Maps. */
-export async function openNavigation(dest: { lat: number; lng: number }, app: 'waze' | 'google' | 'apple'): Promise<boolean> {
-  const urls: Record<typeof app, string> = {
-    waze: `waze://?ll=${dest.lat},${dest.lng}&navigate=yes`,
-    google: Platform.OS === 'ios' ? `comgooglemaps://?daddr=${dest.lat},${dest.lng}&directionsmode=driving` : `google.navigation:q=${dest.lat},${dest.lng}`,
-    apple: `maps://?daddr=${dest.lat},${dest.lng}&dirflg=d`,
-  };
-  const fallback: Record<typeof app, string> = {
-    waze: `https://waze.com/ul?ll=${dest.lat},${dest.lng}&navigate=yes`,
-    google: `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`,
-    apple: `https://maps.apple.com/?daddr=${dest.lat},${dest.lng}`,
-  };
-  try {
-    const can = await Linking.canOpenURL(urls[app]);
-    await Linking.openURL(can ? urls[app] : fallback[app]);
-    return true;
-  } catch {
-    try {
-      await Linking.openURL(fallback[app]);
-      return true;
-    } catch {
-      return false;
-    }
-  }
 }

@@ -1,5 +1,5 @@
-import { ThemeProvider, ToastProvider, useTheme } from '@velio/ui/native';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { ThemeProvider, ToastProvider, useTheme } from '@velio/ui/native';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -27,7 +27,9 @@ export default function RootLayout() {
             persistOptions={{
               persister: queryPersister,
               maxAge: 24 * 60 * 60 * 1000,
-              dehydrateOptions: { shouldDehydrateQuery: (q) => q.state.status === 'success' && shouldPersistQuery(q.queryKey) },
+              dehydrateOptions: {
+                shouldDehydrateQuery: (q) => q.state.status === 'success' && shouldPersistQuery(q.queryKey),
+              },
             }}
           >
             <SessionProvider>

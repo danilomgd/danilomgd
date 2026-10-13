@@ -21,7 +21,15 @@ export function CategoryTile({ name, icon, onPress, selected, variant = 'grid' }
         accessibilityLabel={name}
         accessibilityState={{ selected: Boolean(selected) }}
         onPress={onPress}
-        style={({ pressed }) => [styles.row, { borderRadius: radius.md, backgroundColor: selected ? colors.primarySoft : colors.surface, borderColor: selected ? colors.primary : colors.border, opacity: pressed ? 0.8 : 1 }]}
+        style={({ pressed }) => [
+          styles.row,
+          {
+            borderRadius: radius.md,
+            backgroundColor: selected ? colors.primarySoft : colors.surface,
+            borderColor: selected ? colors.primary : colors.border,
+            opacity: pressed ? 0.8 : 1,
+          },
+        ]}
       >
         <Icon name={icon} size="lg" color={colors.primary} />
         <Text variant="body" style={{ flex: 1 }}>

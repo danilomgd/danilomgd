@@ -34,7 +34,8 @@ export function IconButton({
         : variant === 'onMedia'
           ? colors.surface
           : 'transparent';
-  const fg = color ?? (variant === 'filled' ? colors.textOnPrimary : disabled ? colors.textMuted : colors.text);
+  const fg =
+    color ?? (variant === 'filled' ? colors.textOnPrimary : disabled ? colors.textMuted : colors.text);
   return (
     <Pressable
       accessibilityRole="button"
