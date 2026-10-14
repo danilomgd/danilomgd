@@ -17,7 +17,9 @@ const migrationsFolder = resolve(process.cwd(), 'drizzle');
 async function create(): Promise<Db> {
   const url = process.env.DATABASE_URL;
   if (url) {
-    const sql = postgres(url, { max: 10, prepare: false });
+    // Supabase/Neon/RDS exigem TLS; localhost não. `prepare: false` é compatível com pooler em modo transação.
+    const local = /localhost|127\.0\.0\.1/.test(url);
+    const sql = postgres(url, { max: 10, prepare: false, ssl: local ? undefined : 'require' });
     const db = drizzlePostgres(sql, { schema }) as unknown as Db;
     await migratePostgres(db as never, { migrationsFolder });
     await seedIfEmpty(db);
