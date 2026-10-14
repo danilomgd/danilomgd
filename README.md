@@ -1,7 +1,8 @@
 # Repositório
 
-Dois projetos independentes vivem aqui:
+Três projetos independentes vivem aqui:
 
+- **[`nexo/`](nexo/)**: NEXO, plataforma própria de gestão de trabalho (tarefas, Lista/Quadro/Calendário/Gantt/Tabela, docs, dashboards, metas, tempo) em Next.js + Drizzle, com API REST para automações. Comece por [`nexo/README.md`](nexo/README.md).
 - **[`velio/`](velio/)**: VÉLIO, super app brasileiro de serviços sob demanda (monorepo TypeScript: API, apps mobile, painéis web, documentação). Comece por [`velio/README.md`](velio/README.md) e [`velio/docs/`](velio/docs/).
 - **Raiz**: integração com a API da Higgsfield e servidores MCP auxiliares, descritos abaixo.
 
